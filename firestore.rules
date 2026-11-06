@@ -1,0 +1,226 @@
+rules_version = '2';
+
+// Reglas de Firestore de Ropero Vecinal.
+//
+// - prendas: lectura pública. Solo el dueño (con sesión) la crea, la edita y la borra; el admin puede todo.
+//   La prenda nunca guarda el teléfono del vendedor.
+// - prendas/{id}/privado/contacto: { telefono } del vendedor. Lo escribe el dueño; lo leen el dueño,
+//   el admin y quien marcó «Me interesa» (tiene un documento interesados/{id}_{su uid}).
+// - interesados/{prendaId}_{uid}: lo crea el propio comprador; lo leen el comprador, el dueño y el admin.
+// - intereses: métricas de «Me interesa». Se crean con sesión y sin teléfono; solo las lee el admin.
+// - usuarios/{uid}: perfil público mínimo (nombre, inicial del apellido, zona).
+//   usuarios/{uid}/privado/datos: apellido, correo, teléfono y preferencia de entrega del propio usuario.
+// - resenas: lectura pública. Solo la crea quien compró la prenda; después solo el admin la cambia.
+// - conversaciones y mensajes (chat apagado): solo los participantes.
+// - admins/{uid}: cada uno puede leer el suyo. Se escribe solo con firebase-admin (scripts/migrar.mjs).
+// Todo lo que no aparece aquí queda cerrado.
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ---------- Funciones comunes ----------
+    function sesion() {
+      return request.auth != null;
+    }
+    function uid() {
+      return request.auth.uid;
+    }
+    function isAdmin() {
+      return sesion() && exists(/databases/$(database)/documents/admins/$(request.auth.uid));
+    }
+    function rutaPrenda(prendaId) {
+      return /databases/$(database)/documents/prendas/$(prendaId);
+    }
+    function duenoDePrenda(prendaId) {
+      return sesion() && get(rutaPrenda(prendaId)).data.userId == uid();
+    }
+    function nuevos() {
+      return request.resource.data;
+    }
+    function cambios() {
+      return request.resource.data.diff(resource.data).affectedKeys();
+    }
+    function textoCorto(valor, max) {
+      return valor is string && valor.size() <= max;
+    }
+    function participa(conversacion) {
+      return sesion() && (conversacion.buyer_id == uid() || conversacion.seller_id == uid());
+    }
+
+    // ---------- Prendas ----------
+    match /prendas/{prendaId} {
+      allow read: if true;
+
+      // Se crea a nombre propio, disponible y sin datos de contacto ni de comisión.
+      allow create: if sesion()
+        && nuevos().userId == uid()
+        && nuevos().status == 'available'
+        && !nuevos().keys().hasAny(['telefono', 'whatsapp', 'comisionEstado', 'comisionVerificadaAt',
+                                    'buyerId', 'buyerName', 'soldAt']);
+
+      // El dueño edita su prenda, pero no puede cambiar de dueño, volver a poner el teléfono
+      // ni darse por pagada (o rechazada) la comisión. El admin puede todo.
+      allow update: if isAdmin() || (
+        sesion()
+        && resource.data.userId == uid()
+        && !cambios().hasAny(['userId', 'telefono', 'whatsapp', 'comisionVerificadaAt'])
+        && !(cambios().hasAny(['comisionEstado'])
+             && nuevos().get('comisionEstado', '') in ['pagada', 'rechazada'])
+      );
+
+      allow delete: if isAdmin() || (sesion() && resource.data.userId == uid());
+
+      // Teléfono del vendedor, fuera del documento público.
+      match /privado/{docId} {
+        allow get: if sesion() && docId == 'contacto' && (
+          exists(/databases/$(database)/documents/interesados/$(prendaId + '_' + uid()))
+          || get(rutaPrenda(prendaId)).data.userId == uid()
+          || isAdmin()
+        );
+        // getAfter: se puede escribir en el mismo lote que crea la prenda.
+        allow create, update: if sesion() && docId == 'contacto'
+          && getAfter(rutaPrenda(prendaId)).data.userId == uid()
+          && nuevos().keys().hasOnly(['telefono'])
+          && nuevos().telefono is string
+          && nuevos().telefono.matches('[0-9]{9}');
+        allow delete: if sesion() && (get(rutaPrenda(prendaId)).data.userId == uid() || isAdmin());
+      }
+    }
+
+    // ---------- «Me interesa»: quién puede ver el contacto ----------
+    match /interesados/{interesId} {
+      // El id es {prendaId}_{uid}. El propio comprador puede consultar su documento aunque no exista.
+      function esMio() {
+        let partes = interesId.split('_');
+        return sesion() && partes.size() == 2 && partes[1] == uid();
+      }
+
+      allow get: if esMio()
+        || (sesion() && (resource.data.compradorId == uid() || duenoDePrenda(resource.data.prendaId)))
+        || isAdmin();
+      allow list: if sesion() && (
+        resource.data.compradorId == uid()
+        || duenoDePrenda(resource.data.prendaId)
+        || isAdmin()
+      );
+
+      allow create: if sesion()
+        && nuevos().keys().hasOnly(['prendaId', 'compradorId', 'compradorNombre', 'fecha'])
+        && nuevos().compradorId == uid()
+        && nuevos().prendaId is string
+        && interesId == nuevos().prendaId + '_' + uid()
+        && textoCorto(nuevos().compradorNombre, 60)
+        && nuevos().fecha == request.time
+        && exists(rutaPrenda(nuevos().prendaId))
+        && get(rutaPrenda(nuevos().prendaId)).data.userId != uid()
+        && get(rutaPrenda(nuevos().prendaId)).data.status != 'sold';
+
+      allow delete: if sesion() && resource.data.compradorId == uid();
+    }
+
+    // ---------- Métricas de interés (sin teléfono) ----------
+    match /intereses/{interesId} {
+      allow read: if isAdmin();
+      allow create: if sesion()
+        && nuevos().compradorId == uid()
+        && nuevos().keys().hasOnly(['prendaId', 'cat', 'vendedorNombre', 'vendedorZona', 'compradorId',
+                                    'compradorNombre', 'modalidadEntrega', 'fecha']);
+    }
+
+    // ---------- Usuarios ----------
+    match /usuarios/{userId} {
+      function perfilPublicoValido() {
+        let d = nuevos();
+        return d.keys().hasOnly(['nombre', 'apellidoInicial', 'zona', 'creado', 'actualizado'])
+          && textoCorto(d.nombre, 60)
+          && textoCorto(d.get('apellidoInicial', ''), 2)
+          && textoCorto(d.get('zona', ''), 40);
+      }
+
+      // Perfil público. Los documentos antiguos (creados con add, con correo y teléfono) no se muestran.
+      allow get: if (sesion() && uid() == userId)
+        || isAdmin()
+        || !resource.data.keys().hasAny(['correo', 'telefono', 'apellido']);
+      allow list: if isAdmin();
+      allow create, update: if sesion() && uid() == userId && perfilPublicoValido();
+      allow delete: if sesion() && uid() == userId;
+
+      match /privado/{docId} {
+        allow read: if sesion() && (uid() == userId || isAdmin());
+        allow create, update: if sesion() && uid() == userId && docId == 'datos'
+          && nuevos().keys().hasOnly(['apellido', 'correo', 'telefono', 'preferenciaEntrega', 'actualizado'])
+          && textoCorto(nuevos().get('apellido', ''), 60)
+          && textoCorto(nuevos().get('correo', ''), 120)
+          && textoCorto(nuevos().get('telefono', ''), 15)
+          && textoCorto(nuevos().get('preferenciaEntrega', ''), 40);
+        allow delete: if sesion() && uid() == userId;
+      }
+    }
+
+    // ---------- Reseñas ----------
+    match /resenas/{resenaId} {
+      function resenaDelComprador() {
+        let d = nuevos();
+        let prenda = get(rutaPrenda(d.prendaId)).data;
+        return d.keys().hasOnly(['id', 'sellerId', 'sellerName', 'prendaId', 'prendaCat', 'buyerId',
+                                 'buyerName', 'stars', 'comment', 'fecha', 'createdBy'])
+          && d.buyerId == uid()
+          && d.createdBy == uid()
+          && resenaId == d.prendaId + '_' + uid()
+          && d.stars is int && d.stars >= 1 && d.stars <= 5
+          && d.comment is string && d.comment.size() > 0 && d.comment.size() <= 400
+          && prenda.status == 'sold'
+          && prenda.buyerId == uid()
+          && d.sellerId == prenda.userId;
+      }
+
+      allow read: if true;
+      allow create: if isAdmin() || (sesion() && resenaDelComprador());
+      allow update, delete: if isAdmin();
+    }
+
+    // ---------- Chat interno (apagado con CHAT_ACTIVO = false) ----------
+    match /conversaciones/{convId} {
+      // El id es c_{prendaId}_{uid del comprador}: el comprador puede ver si ya existe.
+      allow get: if participa(resource.data)
+        || (sesion() && convId.matches('c_[A-Za-z0-9]+_' + uid()));
+      allow list: if participa(resource.data);
+      allow create: if sesion()
+        && nuevos().buyer_id == uid()
+        && nuevos().seller_id != uid()
+        && convId == 'c_' + nuevos().product_id + '_' + uid()
+        && get(rutaPrenda(nuevos().product_id)).data.userId == nuevos().seller_id;
+      allow update: if participa(resource.data)
+        && !cambios().hasAny(['buyer_id', 'seller_id', 'product_id']);
+    }
+
+    match /mensajes/{mensajeId} {
+      function conversacion(id) {
+        return get(/databases/$(database)/documents/conversaciones/$(id)).data;
+      }
+
+      allow read: if sesion() && (
+        resource.data.sender_id == uid()
+        || resource.data.receiver_id == uid()
+        || participa(conversacion(resource.data.conversation_id))
+      );
+      allow create: if sesion()
+        && nuevos().sender_id == uid()
+        && participa(conversacion(nuevos().conversation_id))
+        && nuevos().receiver_id in [conversacion(nuevos().conversation_id).buyer_id,
+                                    conversacion(nuevos().conversation_id).seller_id]
+        && nuevos().receiver_id != uid()
+        && textoCorto(nuevos().content, 1000);
+      // Solo quien recibe el mensaje lo marca como leído.
+      allow update: if sesion()
+        && resource.data.receiver_id == uid()
+        && cambios().hasOnly(['is_read']);
+    }
+
+    // ---------- Administradores ----------
+    match /admins/{userId} {
+      allow get: if sesion() && uid() == userId;
+      allow list, write: if false;
+    }
+  }
+}
