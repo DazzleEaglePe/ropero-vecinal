@@ -1,0 +1,3184 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+<meta http-equiv="Pragma" content="no-cache" />
+<meta http-equiv="Expires" content="0" />
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Ropero Vecinal — Prototipo</title>
+<!-- Google Analytics (visitas nuevas por día y tiempo en la página) -->
+<script async src="https://www.googletagmanager.com/gtag/js?id=G-XB2B5ZB2TY"></script>
+<script>
+  window.dataLayer = window.dataLayer || [];
+  function gtag(){ dataLayer.push(arguments); }
+  gtag('js', new Date());
+  gtag('config', 'G-XB2B5ZB2TY');
+</script>
+<link rel="preconnect" href="https://firestore.googleapis.com">
+<link rel="preconnect" href="https://www.gstatic.com" crossorigin>
+<script>
+// Carga rápida del catálogo: pide a Firestore (REST) solo los datos ligeros + miniatura,
+// en paralelo con la descarga de las librerías de Firebase. Las fotos completas llegan después.
+window.__prendasRapidas = (function(){
+  function val(v){
+    if(!v) return null;
+    if('stringValue' in v) return v.stringValue;
+    if('integerValue' in v) return Number(v.integerValue);
+    if('doubleValue' in v) return v.doubleValue;
+    if('booleanValue' in v) return v.booleanValue;
+    if('timestampValue' in v) return v.timestampValue;
+    if('mapValue' in v){ const o = {}; const f = v.mapValue.fields || {}; for(const k in f) o[k] = val(f[k]); return o; }
+    if('arrayValue' in v) return (v.arrayValue.values || []).map(val);
+    return null;
+  }
+  const campos = ['publicador','zona','telefono','whatsapp','cat','talla','estado','modo','precio','desc','mini',
+    'tieneDefecto','detalleDefecto','fotoHash','userId','fecha','createdAt','status','soldAt','buyerId','buyerName',
+    'comisionEstado','comisionOperacion','comisionSolicitadaAt'];
+  try{
+    return fetch('https://firestore.googleapis.com/v1/projects/ropero-vecinal/databases/(default)/documents:runQuery', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ structuredQuery: { from: [{ collectionId: 'prendas' }], select: { fields: campos.map(c => ({ fieldPath: c })) } } })
+    }).then(r => r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status)))
+      .then(rows => rows.filter(r => r.document).map(r => {
+        const datos = {}; const f = r.document.fields || {};
+        for(const k in f) datos[k] = val(f[k]);
+        return { id: r.document.name.split('/').pop(), data: function(){ return datos; } };
+      }))
+      .catch(() => null);
+  }catch(e){ return Promise.resolve(null); }
+})();
+</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    /* --- tokens tomados de design.md (Shop style reference) --- */
+    --bg:#F9FAFB;
+    --card:#ffffff;
+    --ink:#111827;
+    --ink-soft:#6B7280;
+    --line:#E5E7EB;
+    --line-strong:#D1D5DB;
+    --stone:#cccccc;
+    --fog:#acb0aa;
+    --accent:#0F766E;
+    --accent-2:#059669;
+    --cta:#EA580C;
+    --cta-2:#F97316;
+    --accent-wash:#CCFBF1;
+    --accent-shadow: rgba(15,118,110,0.22);
+    --cta-shadow: rgba(234,88,12,0.28);
+    --shadow-sm: rgba(0,0,0,0.06) 0px 2px 8px 0px;
+    --shadow-card: rgba(0,0,0,0.1) 0px 4px 6px -1px, rgba(0,0,0,0.1) 0px 2px 4px -2px;
+    --shadow-lg: rgba(0,0,0,0.12) 0px 4px 24px 0px;
+    --radius-card:28px;
+    --radius-img:20px;
+    --radius-pill:9999px;
+  }
+  *{box-sizing:border-box;}
+  html{scroll-behavior:smooth;}
+  @media (prefers-reduced-motion: reduce){ html{scroll-behavior:auto;} *{animation-duration:0.001ms !important; transition-duration:0.001ms !important;} }
+
+  body{
+    margin:0;
+    background:var(--bg);
+    color:var(--ink);
+    font-family:'Inter', ui-sans-serif, system-ui, -apple-system, sans-serif;
+    font-size:16px;
+    letter-spacing:-0.014em;
+    line-height:1.4;
+    font-weight:400;
+  }
+  h1,h2,h3{font-family:'Inter', sans-serif; font-weight:600; letter-spacing:-0.03em;}
+  .wrap{max-width:1180px; margin:0 auto; padding:0 28px;}
+
+  /* ---------- NAV ---------- */
+  .topnav{
+    display:flex; align-items:center; justify-content:space-between;
+    padding:22px 28px; max-width:1180px; margin:0 auto;
+  }
+  .brand{text-align:center;}
+  .brand .wordmark{font-family:'Inter',sans-serif; font-weight:600; font-size:20px; letter-spacing:-0.03em;}
+  .brand .wordmark::before{content:"● "; color:var(--accent); letter-spacing:0;}
+  .brand .sub{font-size:10px; letter-spacing:.18em; color:var(--ink-soft); margin-top:2px; text-transform:uppercase;}
+  .nav-links{display:flex; gap:6px;}
+  .nav-links button{
+    border:1px solid transparent; background:transparent; font-family:inherit; font-size:14px; font-weight:500;
+    letter-spacing:-0.017em; color:var(--ink-soft); padding:9px 16px; border-radius:var(--radius-pill); cursor:pointer;
+  }
+  .nav-links button.active{background:var(--ink); color:#fff;}
+  .nav-icons{display:flex; align-items:center; gap:14px;}
+  .icon-btn{
+    width:38px; height:38px; border-radius:50%; border:1px solid var(--line);
+    display:flex; align-items:center; justify-content:center; background:#fff; position:relative;
+    box-shadow:var(--shadow-sm);
+  }
+  .icon-btn .count{
+    position:absolute; top:-4px; right:-4px; background:var(--accent); color:#fff; font-size:9.5px;
+    width:16px; height:16px; border-radius:50%; display:flex; align-items:center; justify-content:center;
+  }
+  button.icon-btn{font:inherit; cursor:pointer; padding:0;}
+  #nav-chat-count{background:#c62828; min-width:16px; width:auto; padding:0 4px;}
+  #nav-chat-count[hidden]{display:none;}
+  .avatar-circle{
+    width:38px; height:38px; border-radius:50%; background:var(--ink); border:none; padding:0; cursor:pointer;
+  }
+  .datos-link{
+    border:1px solid var(--line); background:#fff; color:var(--ink);
+    border-radius:var(--radius-pill); padding:9px 14px; font-family:inherit;
+    font-size:13.5px; font-weight:500; letter-spacing:-0.017em; cursor:pointer;
+    box-shadow:var(--shadow-sm);
+  }
+  .datos-link:hover{border-color:var(--ink);}
+  @media(max-width:820px){ .nav-links{display:none;} }
+
+  .modal-overlay{
+    position:fixed; inset:0; z-index:200; background:rgba(0,0,0,.45);
+    display:flex; align-items:center; justify-content:center; padding:20px;
+  }
+  .modal-overlay[hidden]{display:none;}
+  .modal-card{
+    background:var(--card); width:min(480px, 100%);
+    border-radius:var(--radius-card); box-shadow:var(--shadow-lg);
+    padding:26px 24px 22px;
+  }
+  .modal-card h3{font-size:22px; margin:0 0 6px;}
+  .modal-actions{display:flex; gap:10px; justify-content:flex-end; margin-top:8px;}
+  .modal-actions .btn{padding:12px 18px;}
+
+  /* ---------- HERO ---------- */
+  .hero{position:relative; overflow:hidden; padding:16px 0 8px;}
+  .hero-grid{display:grid; grid-template-columns:1fr 0.85fr; gap:24px; align-items:center;}
+  @media(max-width:860px){ .hero-grid{grid-template-columns:1fr;} }
+  .hero-inner{position:relative; z-index:1; text-align:left; max-width:520px;}
+  .hero h1{
+    font-size:clamp(30px,4.4vw,44px); font-weight:600; line-height:1.05; letter-spacing:-0.03em; margin:0 0 14px;
+  }
+  .grad-tag{
+    display:inline-block; background:var(--accent-wash); color:var(--ink);
+    padding:2px 14px; border-radius:var(--radius-pill); font-weight:600;
+  }
+  .hero p{color:var(--ink-soft); max-width:46ch; font-size:16px; margin:0 0 22px;}
+
+  .hero-collage{position:relative; height:340px;}
+  @media(max-width:860px){ .hero-collage{height:220px; margin-top:6px;} }
+  .collage-card{
+    position:absolute; border-radius:var(--radius-img); background:var(--ink); color:#fff;
+    display:flex; flex-direction:column; align-items:center; justify-content:center; gap:10px; padding:16px;
+    font-weight:600; font-size:14px; letter-spacing:-0.02em; box-shadow:var(--shadow-card); overflow:hidden;
+  }
+  .collage-icon{width:34%; height:auto; max-height:44%; opacity:.92;}
+  .collage-card.c1{width:56%; height:78%; top:0; left:0; z-index:2; background:#171514;}
+  .collage-card.c2{width:44%; height:56%; top:4%; right:0; z-index:1; color:var(--ink); background:#e9e6ec;}
+  .collage-card.c3{width:40%; height:42%; bottom:0; right:8%; z-index:3; color:var(--ink); background:#efe9e3;}
+  .collage-card.c4{width:38%; height:34%; bottom:2%; left:8%; z-index:1; color:var(--ink); background:#e6e8e9;}
+
+  .btn{
+    font-family:inherit; border:none; cursor:pointer; border-radius:var(--radius-pill);
+    padding:14px 26px; font-size:14.5px; font-weight:500; letter-spacing:-0.017em;
+    background:var(--cta); color:#fff; box-shadow:0 4px 24px var(--cta-shadow);
+  }
+  .btn:hover{background:var(--cta-2);}
+  .btn.outline{background:transparent; color:var(--ink); border:1.5px solid var(--line-strong); box-shadow:none;}
+  .btn.block{width:100%;}
+  .btn:focus-visible, button:focus-visible, select:focus-visible, input:focus-visible, textarea:focus-visible, [tabindex]:focus-visible{
+    outline:2px solid #7c5cff; outline-offset:2px;
+  }
+
+  /* ---------- PROTOTYPE SHELL ---------- */
+  .proto{padding:14px 0 48px;}
+  .proto-card{
+    background:var(--card); border-radius:var(--radius-card); border:none;
+    box-shadow:var(--shadow-card);
+    padding:8px;
+  }
+  .rack{display:flex; gap:6px; overflow-x:auto; padding:10px 10px 4px;}
+  .tab-pill{
+    border:1px solid var(--line); background:#fff; color:var(--ink-soft); box-shadow:var(--shadow-sm);
+    padding:9px 18px; border-radius:var(--radius-pill); font-size:13.5px; font-weight:500; letter-spacing:-0.017em; cursor:pointer; white-space:nowrap;
+  }
+  .tab-pill.active{background:var(--accent); border-color:var(--accent); color:#fff; box-shadow:0 4px 24px var(--accent-shadow);}
+
+  .screen{display:none; padding:26px 30px 32px;}
+  .screen.active{display:block;}
+  .screen h3{font-size:20px; font-weight:600; letter-spacing:-0.05em; margin:0 0 6px;}
+  .screen-goal{color:var(--ink-soft); font-size:13.5px; margin:0 0 24px; max-width:56ch;}
+
+  .field{margin-bottom:16px;}
+  .field label{display:block; font-size:12px; font-weight:500; margin-bottom:7px; color:var(--ink); text-transform:none;}
+  .field input[type=text], .field input[type=tel], .field select, .field textarea, .field input[type=number]{
+    width:100%; padding:12px 16px; border:1px solid var(--line-strong); border-radius:var(--radius-pill);
+    background:#fff; font-family:inherit; font-size:14.5px; color:var(--ink);
+  }
+  .field textarea{resize:vertical; min-height:70px; border-radius:16px;}
+  .field .hint{display:block; font-size:11.5px; color:var(--ink-soft); font-weight:400; margin-top:6px;}
+  .error-msg{color:#c62828; font-size:12.5px; font-weight:500; margin:-6px 0 14px; display:none;}
+  .error-msg.show{display:block;}
+  .two-col{display:grid; grid-template-columns:1fr 1fr; gap:16px; align-items:start;}
+  @media(max-width:560px){.two-col{grid-template-columns:1fr;}}
+
+  .upload-box{
+    border:1.5px dashed var(--line-strong); border-radius:20px; padding:28px 16px; text-align:center;
+    color:var(--ink-soft); font-size:13px; cursor:pointer; background:#fff; height:190px;
+    display:flex; flex-direction:column; align-items:center; justify-content:center; gap:6px; overflow:hidden;
+  }
+  .upload-box.has-image{padding:0; border-style:solid;}
+  .prenda-thumb img, .detalle-thumb img{width:100%; height:100%; object-fit:cover; display:block;}
+  .empty-catalog{
+    grid-column:1/-1; text-align:center; color:var(--ink-soft); padding:48px 16px; font-size:14px;
+  }
+
+  .pill-group{display:flex; gap:8px; flex-wrap:wrap;}
+  .pill{
+    border:1px solid var(--line-strong); background:#fff; padding:9px 16px; border-radius:var(--radius-pill);
+    font-size:13px; cursor:pointer; color:var(--ink-soft); font-weight:500;
+  }
+  .pill.selected{background:var(--ink); color:#fff; border-color:var(--ink);}
+
+  /* CATALOG */
+  .filters{display:flex; gap:8px; flex-wrap:wrap; margin-bottom:20px; align-items:center;}
+  .filters select{
+    padding:9px 14px; border-radius:var(--radius-pill); border:1px solid var(--line); background:#fff; font-size:13px; font-family:inherit; box-shadow:var(--shadow-sm);
+  }
+  .filters .clear{background:transparent; border:none; color:var(--ink-soft); font-size:13px; text-decoration:underline; cursor:pointer;}
+  .catalog-grid{display:grid; grid-template-columns:repeat(auto-fill,minmax(190px,1fr)); gap:16px;}
+  /* Tarjetas de carga (mientras llega el catálogo) */
+  .skeleton-card{border-radius:var(--radius-card); background:#fff; box-shadow:var(--shadow-card); padding:8px; overflow:hidden;}
+  .sk{background:linear-gradient(90deg,#eceff0 25%,#f6f7f8 37%,#eceff0 63%); background-size:400% 100%; animation:sk-shimmer 1.4s ease infinite; border-radius:10px;}
+  .sk-img{aspect-ratio:4/3; border-radius:var(--radius-img); position:relative; display:flex; align-items:center; justify-content:center; color:#7b8589; font-size:13px; font-weight:500;}
+  .sk-line{height:12px; margin:12px 8px 0;}
+  .sk-line.short{width:55%;}
+  .sk-btn{height:36px; margin:14px 8px 8px; border-radius:var(--radius-pill);}
+  @keyframes sk-shimmer{0%{background-position:100% 50%;}100%{background-position:0 50%;}}
+  @media(prefers-reduced-motion:reduce){ .sk{animation:none;} }
+  .prenda-thumb img{opacity:0; transition:opacity .25s ease;}
+  .prenda-thumb img.ok{opacity:1;}
+  .prenda-card{border-radius:var(--radius-card); overflow:hidden; border:none; background:#fff; box-shadow:var(--shadow-card); padding:8px;}
+  .prenda-thumb{
+    height:150px; position:relative; display:flex; align-items:center; justify-content:center;
+    border-radius:var(--radius-img); overflow:hidden;
+  }
+  .heart{
+    position:absolute; top:10px; right:10px; width:30px; height:30px; border-radius:50%;
+    background:rgba(255,255,255,0.9); display:flex; align-items:center; justify-content:center;
+  }
+  .prenda-body{padding:14px 8px 6px;}
+  .prenda-cat{font-weight:600; font-size:14px; letter-spacing:-0.02em;}
+  .prenda-meta{font-size:12px; color:var(--ink-soft); margin:3px 0 10px;}
+  .price-row{display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;}
+  .price-row .price{font-weight:600; font-size:15px;}
+  .badge{font-size:10.5px; padding:4px 10px; border-radius:var(--radius-pill); font-weight:500; background:var(--bg); color:var(--ink); border:1px solid var(--line);}
+  .interesa-btn{
+    width:100%; border:none; background:var(--cta); color:#fff; padding:10px; border-radius:var(--radius-pill);
+    font-size:13px; font-weight:500; cursor:pointer; box-shadow:0 4px 16px var(--cta-shadow);
+  }
+  .interesa-btn.done{background:#1f8a52; box-shadow:none;}
+  .eliminar-btn{
+    width:100%; margin-top:8px; border:1px solid var(--line-strong); background:#fff; color:#c62828;
+    padding:9px; border-radius:var(--radius-pill); font-size:13px; font-weight:500; cursor:pointer; font-family:inherit;
+  }
+  .eliminar-btn:hover{background:#fff5f5;}
+  .btn:disabled{opacity:.65; cursor:not-allowed;}
+  .btn:disabled:hover{background:var(--cta);}
+
+  /* DETALLE / INTERES — estilo tarjeta de producto de app */
+  .detalle-wrap{display:grid; grid-template-columns:280px 1fr; gap:0; border-radius:var(--radius-card); overflow:hidden; border:none; box-shadow:var(--shadow-card);}
+  @media(max-width:680px){.detalle-wrap{grid-template-columns:1fr;}}
+  .detalle-thumb{min-height:260px; position:relative; border-radius:var(--radius-img); margin:8px 0 8px 8px;}
+  @media(max-width:680px){.detalle-thumb{margin:8px 8px 0 8px;}}
+  .detalle-body{padding:26px;}
+  .detalle-body h4{font-size:20px; font-weight:600; letter-spacing:-0.03em; margin:0 0 8px;}
+  .detalle-tags{display:flex; gap:8px; flex-wrap:wrap; margin-bottom:14px;}
+  .detalle-body p.desc{color:var(--ink-soft); font-size:14px; max-width:48ch; margin:0 0 20px;}
+  .publicador-row{display:flex; align-items:center; gap:10px; margin-bottom:20px; font-size:13px; color:var(--ink-soft);}
+  .mini-avatar{width:30px; height:30px; border-radius:50%; background:var(--ink); flex-shrink:0;}
+  .whatsapp-btn{
+    display:inline-flex; align-items:center; gap:8px; width:100%; justify-content:center;
+    border:none; background:#25D366; color:#fff; padding:13px; border-radius:var(--radius-pill);
+    font-size:14px; font-weight:600; cursor:pointer; text-decoration:none; margin-top:10px; box-sizing:border-box;
+  }
+  .whatsapp-btn:hover{background:#1ebd5a;}
+
+  /* ENTREGA */
+  .entrega-opts{display:grid; grid-template-columns:1fr 1fr; gap:16px;}
+  @media(max-width:640px){.entrega-opts{grid-template-columns:1fr;}}
+  .entrega-card{border:1px solid var(--line); border-radius:var(--radius-img); padding:22px; cursor:pointer; background:#fff; box-shadow:var(--shadow-sm);}
+  .entrega-card h4{margin:0 0 8px; font-weight:600; font-size:16px;}
+  .entrega-card p{margin:0; font-size:13.5px; color:var(--ink-soft);}
+  .entrega-card.selected{border-color:var(--accent); background:#f0fdfa; box-shadow:0 4px 24px var(--accent-shadow);}
+  .confirm-msg{margin-top:18px; font-size:13.5px; color:#1f8a52; font-weight:600; display:none;}
+
+  footer{padding:26px 0 40px; text-align:center; font-size:12px; color:var(--ink-soft);}
+
+  /* BURBUJA FLOTANTE DE SOPORTE WHATSAPP */
+  .wa-float{position:fixed; bottom:24px; right:24px; z-index:100;}
+  .wa-float-btn{
+    width:56px; height:56px; border-radius:50%; background:#25D366; color:#fff;
+    display:flex; align-items:center; justify-content:center; box-shadow:var(--shadow-lg);
+    text-decoration:none; cursor:pointer;
+  }
+  .wa-float-btn:hover{background:#1ebd5a;}
+  .wa-tooltip{
+    position:absolute; right:66px; bottom:10px; white-space:nowrap;
+    background:var(--ink); color:#fff; font-size:12.5px; font-weight:500;
+    padding:9px 14px; border-radius:var(--radius-pill); box-shadow:var(--shadow-lg);
+    opacity:0; visibility:hidden; transform:translateX(6px);
+    transition:opacity .15s ease, transform .15s ease;
+  }
+  .wa-float:hover .wa-tooltip{opacity:1; visibility:visible; transform:translateX(0);}
+
+  .chat-shell{
+    display:grid; grid-template-columns:minmax(220px,280px) 1fr;
+    height:min(680px, calc(100vh - 280px)); min-height:460px;
+    border:1px solid var(--line); border-radius:16px; overflow:hidden; background:#fff;
+  }
+  .chat-list{border-right:1px solid var(--line); overflow:auto; background:#fafafa; min-height:0;}
+  .chat-item{display:grid; grid-template-columns:36px 1fr auto; gap:8px; width:100%; text-align:left; border:none; border-bottom:1px solid var(--line); background:transparent; padding:12px; cursor:pointer; font:inherit;}
+  .chat-item.active{background:#f3f0ff;}
+  .chat-avatar{width:36px; height:36px; border-radius:50%; background:var(--ink); color:#fff; display:flex; align-items:center; justify-content:center; font-size:13px; font-weight:600;}
+  .chat-item strong{display:block; font-size:13.5px;}
+  .chat-item small{display:block; color:var(--ink-soft); font-size:12px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:28ch;}
+  .chat-unread{background:#c62828; color:#fff; border-radius:99px; min-width:18px; height:18px; font-size:11px; display:flex; align-items:center; justify-content:center; padding:0 5px;}
+  .chat-room{display:flex; flex-direction:column; min-height:0; height:100%;}
+  #chat-active{display:flex; flex-direction:column; flex:1; min-height:0;}
+  #chat-active[hidden]{display:none;}
+  .chat-empty{margin:auto; color:var(--ink-soft); padding:24px; text-align:center;}
+  .chat-safety{background:#fff8e8; color:#6a4b00; font-size:12.5px; padding:10px 14px; border-bottom:1px solid #f0e2b8;}
+  .chat-head{padding:12px 14px; border-bottom:1px solid var(--line); display:flex; justify-content:space-between; gap:10px; align-items:center;}
+  .chat-head h4{margin:0; font-size:15px;}
+  .chat-back{display:none;}
+  .chat-log{flex:1; min-height:0; overflow:auto; padding:14px; display:flex; flex-direction:column; gap:8px; background:#f7f7f8;}
+  .burbuja{max-width:78%; padding:10px 12px; border-radius:14px; font-size:14px; line-height:1.35; background:#fff; border:1px solid var(--line);}
+  .burbuja.mia{margin-left:auto; background:var(--accent); color:#fff; border-color:transparent;}
+  .burbuja time{display:block; margin-top:4px; font-size:10px; opacity:.75;}
+  .chat-compose{display:flex; gap:8px; padding:12px; border-top:1px solid var(--line); background:#fff;}
+  .chat-compose input{flex:1; min-width:0; border:1px solid var(--line-strong); border-radius:var(--radius-pill); padding:10px 14px; font:inherit; font-size:16px;}
+  #btn-reservar{flex:0 0 auto;}
+  @media(max-width:820px){
+    body.chat-abierto .hero{display:none;}
+    body.chat-abierto .proto{padding-top:0;}
+    body.chat-abierto .wa-float{display:none;}
+    #screen-mensajes{padding:14px 12px 12px;}
+    #screen-mensajes .screen-goal{display:none;}
+    .chat-shell{grid-template-columns:1fr; height:calc(100dvh - 168px); min-height:320px;}
+    .chat-compose{padding-bottom:calc(12px + env(safe-area-inset-bottom));}
+    .chat-shell.en-hilo .chat-list{display:none;}
+    .chat-shell:not(.en-hilo) .chat-room{display:none;}
+    .chat-back{display:inline-flex; padding:8px 12px;}
+    .chat-head{flex-wrap:wrap; align-items:flex-start;}
+    .chat-head #btn-reservar{width:100%; order:3;}
+    .chat-safety{font-size:12px; line-height:1.35;}
+    .chat-compose .btn{padding:12px 14px;}
+  }
+
+  .story{padding:8px 0 28px;}
+  .story-grid{display:grid; grid-template-columns:1.1fr .9fr; gap:22px;}
+  @media(max-width:860px){ .story-grid,.steps{grid-template-columns:1fr;} }
+  .story-card,.step{
+    background:#fff; border:1px solid var(--line); border-radius:24px;
+    box-shadow:var(--shadow-sm); padding:22px 22px 18px;
+  }
+  .kicker{color:var(--accent); font-size:12px; font-weight:600; letter-spacing:.08em; text-transform:uppercase; margin:0 0 8px;}
+  .steps{display:grid; grid-template-columns:repeat(3,1fr); gap:14px; margin-top:14px;}
+  .step b{display:block; margin:8px 0 6px;}
+  .step span{display:inline-flex; width:28px; height:28px; border-radius:50%; background:var(--accent); color:#fff; align-items:center; justify-content:center; font-size:13px;}
+  .loc-badge{display:inline-block; background:var(--accent-wash); color:#115E59; border-radius:999px; padding:4px 10px; font-size:12px; font-weight:600;}
+  .foto-slots{display:grid; grid-template-columns:repeat(3,1fr); gap:10px;}
+  @media(max-width:700px){ .foto-slots{grid-template-columns:1fr;} }
+  .foto-slot{border:1px dashed var(--line-strong); border-radius:16px; min-height:140px; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:6px; cursor:pointer; background:#fff; text-align:center; padding:8px; font-size:13px; color:var(--ink-soft);}
+  .foto-slot img{width:100%; height:120px; object-fit:cover; border-radius:12px;}
+  .nota-defecto{background:#FFF7ED; border:1px solid #FDBA74; color:#9A3412; border-radius:16px; padding:12px 14px; margin:8px 0 12px;}
+  .galeria{display:flex; gap:8px; overflow:auto; margin-bottom:12px;}
+  .galeria button{border:1px solid var(--line); padding:0; border-radius:12px; background:#fff; cursor:zoom-in;}
+  .galeria img{width:92px; height:92px; object-fit:cover; border-radius:12px; display:block;}
+  .lightbox{position:fixed; inset:0; z-index:300; background:rgba(17,24,39,.92); display:flex; align-items:center; justify-content:center; padding:20px;}
+  .lightbox[hidden]{display:none;}
+  .lightbox img{max-width:96vw; max-height:88vh; object-fit:contain; border-radius:12px;}
+  .lightbox-x{position:absolute; top:16px; right:16px; border:none; background:#fff; border-radius:999px; padding:8px 14px; font:inherit; cursor:pointer;}
+  .btn.verde{background:var(--accent); box-shadow:0 4px 18px var(--accent-shadow);}
+  .btn.verde:hover{background:var(--accent-2);}
+  .auth-tabs{display:flex; gap:8px; margin-bottom:14px;}
+  .auth-tabs button{flex:1; border:1px solid var(--line); background:#fff; border-radius:999px; padding:8px; font:inherit; cursor:pointer;}
+  .auth-tabs button.active{background:var(--accent); color:#fff; border-color:var(--accent);}
+  .pass-row{display:flex; gap:8px;}
+  .pass-row input{flex:1;}
+  .user-menu{position:relative;}
+  .user-drop{position:absolute; right:0; top:46px; background:#fff; border:1px solid var(--line); border-radius:16px; box-shadow:var(--shadow-lg); min-width:210px; padding:8px; z-index:40;}
+  .user-drop button{display:block; width:100%; text-align:left; border:none; background:transparent; font:inherit; padding:10px 12px; border-radius:10px; cursor:pointer;}
+  .user-drop button:hover{background:var(--bg);}
+  .iniciales{display:inline-flex; width:28px; height:28px; border-radius:50%; background:var(--accent); color:#fff; align-items:center; justify-content:center; font-size:12px; margin-right:6px;}
+  /* VENDIDO + RESEÑAS */
+  .vendido-overlay{position:absolute; inset:0; background:rgba(0,0,0,.72); display:flex; align-items:center; justify-content:center; z-index:1; pointer-events:none;}
+  .vendido-tag{background:#000; color:#fff; border:2px solid #fff; border-radius:8px; padding:6px 16px; font-weight:700; font-size:16px; letter-spacing:.16em; transform:rotate(-8deg);}
+  .interesa-btn.vendida{background:var(--line-strong); color:var(--ink-soft); box-shadow:none; cursor:not-allowed;}
+  .vender-btn{width:100%; margin-top:8px; border:1.5px solid var(--accent); background:#fff; color:var(--accent); padding:9px; border-radius:var(--radius-pill); font:inherit; font-size:13px; font-weight:600; cursor:pointer;}
+  .vender-btn:hover{background:#f0fdfa;}
+  .yape-box{background:#F3E8FF; border:1.5px solid #7E22CE; border-radius:12px; padding:12px 14px; text-align:center; margin:10px 0; display:flex; flex-direction:column; gap:6px; align-items:center;}
+  .yape-box small{color:#6B21A8;}
+  .yape-box strong{font-size:24px; letter-spacing:1px; color:#581C87;}
+  .yape-pasos{margin:8px 0 12px 18px; padding:0; font-size:14px; line-height:1.5;}
+  .pago-item{border:1px solid var(--line); border-radius:12px; padding:10px 12px; margin:8px 0;}
+  .pago-item .pago-acciones{display:flex; gap:8px; margin-top:8px;}
+  .pago-item .pago-acciones .btn{flex:1;}
+  .banner-vendida{background:#111827; color:#fff; border-radius:16px; padding:14px 16px; font-size:14px; font-weight:500; margin-top:10px; display:flex; gap:10px; align-items:center;}
+  .banner-vendida b{background:#fff; color:#111827; border-radius:6px; padding:3px 8px; font-size:12px; letter-spacing:.12em;}
+  .link-vendedor{border:none; background:none; padding:0; font:inherit; color:var(--accent); font-weight:600; text-decoration:underline; cursor:pointer;}
+  .stars{color:var(--cta); letter-spacing:2px; white-space:nowrap;}
+  .star-picker{display:flex; gap:4px;}
+  .star-picker button{border:none; background:none; font-size:30px; line-height:1; color:var(--line-strong); cursor:pointer; padding:2px;}
+  .star-picker button.on{color:var(--cta);}
+  .rep-head{display:flex; align-items:center; gap:14px; margin-bottom:14px;}
+  .rep-avatar{width:52px; height:52px; border-radius:50%; background:var(--accent); color:#fff; display:flex; align-items:center; justify-content:center; font-weight:600; font-size:18px; flex-shrink:0;}
+  .verificado{display:inline-block; background:var(--accent-wash); color:#115E59; border-radius:999px; padding:3px 10px; font-size:12px; font-weight:600;}
+  .rep-score{font-size:15px; margin:4px 0 16px;}
+  .rep-score strong{font-size:22px;}
+  .resena{display:grid; grid-template-columns:56px 1fr; gap:12px; padding:12px 0; border-top:1px solid var(--line);}
+  .resena-thumb{width:56px; height:56px; border-radius:12px; background:#e6e8e9; overflow:hidden;}
+  .resena-thumb img{width:100%; height:100%; object-fit:cover; display:block;}
+  .resena p{margin:4px 0 0; font-size:13.5px; color:var(--ink);}
+  .resena small{color:var(--ink-soft); font-size:12px;}
+  #reg-correo[readonly]{background:var(--bg); color:var(--ink-soft);}
+  .user-drop button#menu-salir{color:#c62828;}
+  .aviso-mias{display:inline-flex; align-items:center; gap:8px; background:#FFEDD5; color:#9A3412; border-radius:var(--radius-pill); padding:5px 12px; font-size:12.5px; font-weight:600;}
+  .aviso-mias[hidden]{display:none;}
+  @media(max-width:820px){
+    .topnav{flex-wrap:wrap; gap:10px; padding:14px 16px;}
+    .brand{order:1;}
+    .nav-icons{order:2; gap:8px; flex-wrap:wrap; justify-content:flex-end;}
+    .nav-links{display:flex; order:3; width:100%; overflow-x:auto; gap:6px;}
+    .nav-links .tab-pill{white-space:nowrap; text-decoration:none;}
+    #btn-entrar{padding:10px 16px; font-size:13px;}
+    #user-corto{display:none;}
+    .iniciales{margin-right:0;}
+  }
+
+  /* =====================================================================
+     RESPONSIVE MOBILE-FIRST + CAMPOS ESTANDARIZADOS
+     (equivalentes a las utilidades Tailwind pedidas; el proyecto usa CSS propio)
+     ===================================================================== */
+  img{max-width:100%;}
+  [hidden]{display:none !important;}
+  html, body{overflow-x:hidden;}
+  #btn-entrar{white-space:nowrap;}
+  .hero-grid{grid-template-columns:minmax(0,1fr);}
+  @media(min-width:861px){ .hero-grid{grid-template-columns:minmax(0,1fr) minmax(0,.85fr);} }
+  .story-grid, .steps{grid-template-columns:minmax(0,1fr);}
+  @media(min-width:861px){ .steps{grid-template-columns:repeat(3,minmax(0,1fr));} .story-grid{grid-template-columns:1.1fr .9fr;} }
+  .nav-icons{min-width:0;}
+  .brand .wordmark::before{content:"●"; margin-right:6px;}
+
+  /* Contenedores: px-4 sm:px-6 lg:px-8 */
+  .wrap{padding:0 16px;}
+  .topnav{padding-left:16px; padding-right:16px;}
+  .screen{padding:20px 14px 24px;}
+  .proto-card{padding:4px;}
+  .detalle-body{padding:18px;}
+  @media(min-width:640px){
+    .wrap{padding:0 24px;} .topnav{padding-left:24px; padding-right:24px;}
+    .screen{padding:26px 24px 32px;} .proto-card{padding:8px;} .detalle-body{padding:26px;}
+  }
+  @media(min-width:1024px){ .wrap{padding:0 32px;} .topnav{padding-left:32px; padding-right:32px;} .screen{padding:26px 30px 32px;} }
+
+  /* Inputs, selects y textareas: un único estilo (h-11, w-full, rounded-xl, focus ring #0F766E) */
+  .field input:not([type=checkbox]):not([type=radio]):not([type=file]):not([type=hidden]),
+  .field select, .field textarea, .chat-compose input{
+    display:block; width:100%; min-height:44px; padding:10px 16px; margin:0;
+    font-family:inherit; font-size:16px; line-height:1.4; color:var(--ink);
+    background:#fff; border:1px solid #D1D5DB; border-radius:12px; outline:none;
+    transition:box-shadow .15s ease, border-color .15s ease;
+  }
+  .chat-compose input{width:auto; flex:1; min-width:0;}
+  @media(min-width:640px){
+    .field input:not([type=checkbox]):not([type=radio]):not([type=file]):not([type=hidden]),
+    .field select, .field textarea{font-size:15px; border-radius:12px;}
+  }
+  .field input::placeholder, .field textarea::placeholder, .chat-compose input::placeholder{color:#9CA3AF;}
+  .field input:focus, .field select:focus, .field textarea:focus, .chat-compose input:focus{
+    outline:none; border-color:transparent; box-shadow:0 0 0 2px #0F766E;
+  }
+  .field textarea{min-height:100px; padding:12px 16px; border-radius:12px; resize:vertical;}
+  .field input[readonly]{background:var(--bg); color:var(--ink-soft);}
+  .pass-row{display:flex; gap:8px; align-items:stretch;}
+  .pass-row input{flex:1; width:auto; min-width:0;}
+  .pass-row .btn{flex:0 0 auto; padding:0 16px;}
+  .field{margin-bottom:14px;}
+  .two-col{gap:0 16px;}
+  @media(max-width:640px){ .two-col{grid-template-columns:1fr;} }
+
+  /* Botones e íconos: área táctil mínima de 44px */
+  .btn, .interesa-btn, .eliminar-btn, .vender-btn, .datos-link, .pill, .tab-pill,
+  .auth-tabs button, .user-drop button, .nav-links button, .whatsapp-btn, .lightbox-x{
+    min-height:44px;
+  }
+  .btn, .interesa-btn, .eliminar-btn, .vender-btn, .datos-link, .pill, .tab-pill, .auth-tabs button, .whatsapp-btn{
+    display:inline-flex; align-items:center; justify-content:center; text-align:center;
+  }
+  .interesa-btn, .eliminar-btn, .vender-btn{display:flex; width:100%;}
+  .icon-btn, .avatar-circle{width:44px; height:44px;}
+  .star-picker button{min-width:44px; min-height:44px;}
+  .user-drop button{display:flex; align-items:center;}
+  .chat-compose .btn{padding:0 18px;}
+  .link-vendedor{min-height:44px; padding:0 4px;}
+  .filters select{min-height:44px; flex:1 1 150px; max-width:100%;}
+  .filters .clear{min-height:44px; padding:0 8px;}
+  .btn:focus-visible, button:focus-visible, a:focus-visible{outline:2px solid #0F766E; outline-offset:2px;}
+
+  /* Catálogo: 1 col móvil, 2 en sm/md, 3 en lg, 4 en xl */
+  .catalog-grid{grid-template-columns:1fr; gap:16px;}
+  @media(min-width:640px){ .catalog-grid{grid-template-columns:repeat(2,minmax(0,1fr));} }
+  @media(min-width:1024px){ .catalog-grid{grid-template-columns:repeat(3,minmax(0,1fr));} }
+  @media(min-width:1280px){ .catalog-grid{grid-template-columns:repeat(4,minmax(0,1fr));} }
+  .prenda-thumb{height:auto; aspect-ratio:4/3;}
+  @media(min-width:640px){ .prenda-thumb{aspect-ratio:1/1;} }
+
+  /* Modales: w-[95%] max-w-md mx-auto, max-h-[90vh] overflow-y-auto */
+  .modal-overlay{padding:8px; overflow-y:auto;}
+  .modal-card{width:95%; max-width:448px; margin:0 auto; max-height:90vh; max-height:90dvh; overflow-y:auto; padding:22px 16px 18px;}
+  @media(min-width:640px){ .modal-card{padding:26px 24px 22px;} }
+  .modal-actions{flex-wrap:wrap; gap:10px;}
+  .modal-actions .btn{flex:1 1 140px; padding:0 18px;}
+  .auth-tabs button{font-weight:500;}
+  .lightbox{padding:12px;}
+
+  /* Detalle, chat y galería en móvil */
+  .detalle-wrap{grid-template-columns:1fr;}
+  @media(min-width:680px){ .detalle-wrap{grid-template-columns:280px 1fr;} }
+  .galeria img{width:76px; height:76px;}
+  .detalle-body p.desc{max-width:none;}
+  .hero-inner{max-width:none;}
+  .entrega-card{padding:18px;}
+  @media(max-width:820px){ #btn-hero-cta{width:100%; min-height:48px;} }
+  .nav-links a.tab-pill{text-decoration:none;}
+  .wa-float{bottom:16px; right:16px;}
+  @media(max-width:480px){
+    .story-card, .step{padding:18px 16px 14px;}
+    .nav-icons .icon-btn{width:44px; height:44px;}
+    .avatar-circle{display:none;}
+  }
+</style>
+</head>
+<body>
+
+<div class="topnav">
+  <div class="nav-links" role="tablist" aria-label="Pantallas del prototipo">
+    <a class="tab-pill" href="#inicio">Inicio</a>
+    <button class="tab-pill nav-mirror" data-screen="catalogo">Catálogo</button>
+    <button type="button" class="tab-pill" id="btn-publicar-nav">Publicar prenda</button>
+    <a class="tab-pill" href="#quienes">Quiénes somos</a>
+    <a class="tab-pill" href="#como">Cómo funciona</a>
+  </div>
+  <div class="brand">
+    <div class="wordmark">ROPERO</div>
+    <div class="sub">SAN MIGUEL</div>
+  </div>
+  <div class="nav-icons">
+    <button type="button" class="btn verde" id="btn-entrar">Iniciar sesión / Registrarse</button>
+    <div class="user-menu" id="user-menu" hidden>
+      <button type="button" class="datos-link" id="btn-user"><span class="iniciales" id="user-iniciales">RV</span><span id="user-corto">Vecino</span></button>
+      <div class="user-drop" id="user-drop" hidden>
+        <button type="button" id="menu-publicaciones">Mis publicaciones</button>
+        <button type="button" id="menu-pendientes" hidden>★ Calificar mis compras</button>
+        <button type="button" id="menu-pagos" hidden>💳 Pagos por verificar</button>
+        <button type="button" id="menu-reputacion">Mi reputación y reseñas</button>
+        <button type="button" id="menu-mensajes" hidden style="display:none">Mis mensajes / chats</button>
+        <button type="button" id="menu-perfil">Editar perfil</button>
+        <button type="button" id="menu-salir">Cerrar sesión</button>
+      </div>
+    </div>
+    <button type="button" class="datos-link" id="btn-mis-datos" hidden>Mis datos</button>
+    <button type="button" class="icon-btn" id="btn-nav-chat" title="Mensajes" aria-label="Mensajes" hidden style="display:none">
+      💬<span class="count" id="nav-chat-count" hidden>0</span>
+    </button>
+    <div class="icon-btn" title="Interés">
+      ♥<span class="count" id="nav-interes">0</span>
+    </div>
+    <button type="button" class="avatar-circle" id="btn-avatar-datos" title="Editar perfil" aria-label="Editar perfil"></button>
+  </div>
+</div>
+
+<section class="hero" id="inicio">
+  <div class="wrap hero-grid">
+    <div class="hero-inner">
+      <h1>Dale una segunda vida<br>a tu <span class="grad-tag">ROPERO</span></h1>
+      <p>Publica, encuentra e intercambia ropa con vecinos de San Miguel en minutos. Publicar es gratis y sin comisiones.</p>
+      <button class="btn" id="btn-hero-cta">Empieza a publicar ahora</button>
+    </div>
+    <div class="hero-collage" aria-hidden="true">
+      <div class="collage-card c1">
+        <svg class="collage-icon" viewBox="0 0 64 64" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 10 12 16v8l6-2v28h28V22l6 2v-8L42 10c0 4-4.5 7-10 7s-10-3-10-7Z"/></svg>
+        <span>Chaquetas</span>
+      </div>
+      <div class="collage-card c2">
+        <svg class="collage-icon" viewBox="0 0 64 64" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M26 8h12l3 10-5 3 2 8-4 25H26l-4-25 2-8-5-3 3-10Z"/></svg>
+        <span>Vestidos</span>
+      </div>
+      <div class="collage-card c3">
+        <svg class="collage-icon" viewBox="0 0 64 64" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 44c0-6 4-9 10-11l8-3c3-1 4-3 4-6h6c1 5 4 7 9 9l8 3c5 2 7 4 7 8v3H6v-3Z"/><path d="M20 36v4M32 33v5"/></svg>
+        <span>Calzado</span>
+      </div>
+      <div class="collage-card c4">
+        <svg class="collage-icon" viewBox="0 0 64 64" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M24 9 14 15v9l5-2v26h26V22l5 2v-9L40 9c-1 3-4 5-8 5s-7-2-8-5Z"/></svg>
+        <span>Camisas</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="story" id="quienes">
+  <div class="wrap">
+    <div class="story-card">
+      <p class="kicker">Quiénes somos</p>
+      <h2>Ropa de San Miguel, con una segunda vida</h2>
+      <p>Ropero Vecinal nace en San Miguel para darle salida a la ropa que se queda en los clósets. Conectamos a vecinos y a la comunidad universitaria para publicar, conversar y entregar con fotos reales y un encuentro en un punto público.</p>
+      <span class="loc-badge">San Miguel</span>
+    </div>
+  </div>
+</section>
+
+<section class="story" id="como">
+  <div class="wrap">
+    <p class="kicker">Cómo funciona</p>
+    <h2>Qué hacemos</h2>
+    <div class="steps">
+      <article class="step"><span>1</span><b>Publica o encuentra</b><p>Explora prendas de vecinos en San Miguel con fotos de frente, de atrás y del detalle si hay una falla.</p></article>
+      <article class="step"><span>2</span><b>Coordinación y chat interno</b><p>Marca tu interés y conversa dentro de la página, sin salir a otro aplicativo.</p></article>
+      <article class="step"><span>3</span><b>Entrega y pago en custodia</b><p>Se encuentran en un punto público de San Miguel. El pago queda resguardado hasta que la entrega esté conforme.</p></article>
+    </div>
+  </div>
+</section>
+
+<section class="proto">
+  <div class="wrap">
+    <div class="proto-card">
+      <div class="rack" role="tablist" aria-label="Pantallas del prototipo">
+        <button class="tab-pill" data-screen="registro">1 · Mi perfil</button>
+        <button class="tab-pill" data-screen="publicar">2 · Publicar</button>
+        <button class="tab-pill active" data-screen="catalogo">3 · Catálogo</button>
+        <button class="tab-pill" data-screen="interes">4 · Interés</button>
+        <button class="tab-pill" data-screen="entrega">5 · Entrega</button>
+        <button class="tab-pill" data-screen="mensajes" hidden style="display:none">6 · Mensajes</button>
+      </div>
+
+      <!-- 1 REGISTRO -->
+      <div class="screen" id="screen-registro">
+        <h3>Crea tu perfil</h3>
+        <p class="screen-goal">Solo lo esencial para que otros vecinos confíen en ti al publicar o contactar. Todos los campos son obligatorios.</p>
+        <div class="two-col">
+          <div class="field">
+            <label for="reg-nombre">Nombre</label>
+            <input type="text" id="reg-nombre" placeholder="Ej. Camila" required>
+          </div>
+          <div class="field">
+            <label for="reg-apellido">Apellido</label>
+            <input type="text" id="reg-apellido" placeholder="Ej. Ramos" required>
+          </div>
+        </div>
+        <div class="two-col">
+          <div class="field">
+            <label for="reg-correo">Correo electrónico</label>
+            <input type="email" id="reg-correo" placeholder="Ej. camila@correo.com" required>
+          </div>
+          <div class="field">
+            <label for="reg-zona">Zona en San Miguel</label>
+            <select id="reg-zona" required>
+              <option value="">Selecciona tu zona</option>
+              <option>Costanera</option>
+              <option>Av. La Marina</option>
+              <option>Parque Central</option>
+              <option>La Mar / Universitaria</option>
+              <option>Riva Agüero</option>
+              <option>Bertolotto</option>
+            </select>
+          </div>
+        </div>
+        <div class="field">
+          <label for="reg-whatsapp">Número de WhatsApp</label>
+          <input type="tel" id="reg-whatsapp" placeholder="Ej. 987 654 321" inputmode="numeric" required>
+          <span class="hint">Solo se muestra a la persona que marque "Me interesa" en tus prendas, después de coordinar la entrega.</span>
+        </div>
+        <p class="error-msg" id="registro-error">Completa nombre, apellido, correo, zona y celular para continuar.</p>
+        <button class="btn" id="btn-crear-perfil">Crear perfil y continuar</button>
+      </div>
+
+      <!-- 2 PUBLICAR -->
+      <div class="screen" id="screen-publicar">
+        <h3>Publica una prenda</h3>
+        <p class="screen-goal">Frente y atrás son obligatorias. Si hay una falla, también su foto y su descripción.</p>
+        <div class="field">
+          <label>Fotos de la prenda</label>
+          <div class="foto-slots">
+            <label class="foto-slot" id="slot-frente">Vista frontal<input type="file" id="foto-frente" accept="image/*" hidden></label>
+            <label class="foto-slot" id="slot-atras">Vista posterior<input type="file" id="foto-atras" accept="image/*" hidden></label>
+            <label class="foto-slot" id="slot-defecto">Foto del defecto<input type="file" id="foto-defecto" accept="image/*" hidden></label>
+          </div>
+          <span class="hint" id="upload-hint">Cada foto se reduce sola antes de publicarse.</span>
+        </div>
+        <div class="field">
+          <label>¿La prenda tiene algún defecto, mancha o desgaste?</label>
+          <div class="pill-group" id="defecto-group">
+            <button type="button" class="pill selected" data-defecto="no">No</button>
+            <button type="button" class="pill" data-defecto="si">Sí</button>
+          </div>
+        </div>
+        <div id="defecto-extra" hidden>
+          <div class="field">
+            <label for="pub-defecto">Descripción detallada de la falla o defecto</label>
+            <textarea id="pub-defecto" placeholder="Ej. Cierre un poco duro. Pequeña mancha en la manga izquierda."></textarea>
+          </div>
+        </div>
+        <div class="two-col">
+          <div>
+            <div class="field">
+              <label for="pub-categoria">Categoría</label>
+              <select id="pub-categoria">
+                <option>Camisas y blusas</option>
+                <option>Pantalones</option>
+                <option>Vestidos</option>
+                <option>Chaquetas</option>
+                <option>Calzado</option>
+              </select>
+            </div>
+            <div class="field">
+              <label for="pub-talla">Talla</label>
+              <select id="pub-talla"><option>XS</option><option>S</option><option>M</option><option>L</option><option>XL</option></select>
+            </div>
+          </div>
+        </div>
+
+        <div class="field">
+          <label>Estado</label>
+          <div class="pill-group" id="estado-group">
+            <button class="pill" data-estado="Nueva">Nueva</button>
+            <button class="pill selected" data-estado="Poco uso">Poco uso</button>
+            <button class="pill" data-estado="Buen estado">Buen estado</button>
+            <button class="pill" data-estado="Con defectos">Con defectos</button>
+          </div>
+        </div>
+
+        <div class="field">
+          <label for="pub-desc">Descripción breve</label>
+          <textarea id="pub-desc" placeholder="Cuenta medidas, material, marca y nivel de uso. Ej. Jean 98% algodón, marca local, usado unas 5 veces. Ancho de hombros 42 cm."></textarea>
+        </div>
+
+        <div class="field">
+          <label>Modalidad</label>
+          <div class="pill-group" id="modalidad-group">
+            <button class="pill selected" data-mode="venta">Venta</button>
+            <button class="pill" data-mode="intercambio">Intercambio</button>
+            <button class="pill" data-mode="donacion">Donación</button>
+          </div>
+        </div>
+
+        <div class="field" id="precio-field">
+          <label for="pub-precio">Precio (S/)</label>
+          <input type="number" id="pub-precio" placeholder="Ej. 35">
+        </div>
+
+        <p class="error-msg" id="publicar-error"></p>
+        <button class="btn" id="btn-publicar">Publicar prenda</button>
+      </div>
+
+      <!-- 3 CATALOGO -->
+      <div class="screen active" id="screen-catalogo">
+        <h3>Catálogo de San Miguel</h3>
+        <p class="screen-goal">Filtra por lo que de verdad te importa al buscar.</p>
+        <div class="filters">
+          <select id="f-cat"><option value="">Categoría</option></select>
+          <select id="f-talla"><option value="">Talla</option></select>
+          <select id="f-mod">
+            <option value="">Modalidad</option>
+            <option value="venta">Venta</option>
+            <option value="intercambio">Intercambio</option>
+            <option value="donacion">Donación</option>
+          </select>
+          <button class="clear" id="btn-limpiar">Limpiar filtros</button>
+          <span class="aviso-mias" id="aviso-mias" hidden><span id="aviso-texto">Mostrando solo tus publicaciones</span> <button type="button" class="clear" id="btn-ver-todas">Ver todas</button></span>
+        </div>
+        <div class="catalog-grid" id="catalog-grid"></div>
+      </div>
+
+      <!-- 4 INTERES -->
+      <div class="screen" id="screen-interes">
+        <h3>Detalle de la prenda</h3>
+        <p class="screen-goal">Toca "Me interesa" en el catálogo para ver una prenda aquí.</p>
+        <div id="interes-content"></div>
+      </div>
+
+      <!-- 5 ENTREGA -->
+      <div class="screen" id="screen-entrega">
+        <h3>Coordina la entrega</h3>
+        <p class="screen-goal">Elige la forma de encuentro que más te acomode.</p>
+        <div class="entrega-opts">
+          <div class="entrega-card" data-entrega="publico">
+            <h4>📍 Punto público seguro</h4>
+            <p>Encuentro en un lugar concurrido de San Miguel, como el Parque de la Amistad o Plaza San Miguel.</p>
+          </div>
+          <div class="entrega-card" data-entrega="envio">
+            <h4>🛵 Envío motorizado</h4>
+            <p>Comprador y vendedor coordinan y contratan el motorizado entre ambos, y acuerdan quién cubre el costo. Ropero Vecinal solo los conecta; no gestiona ni paga el envío.</p>
+          </div>
+        </div>
+        <p class="confirm-msg" id="entrega-confirm">✓ Listo. Abriendo WhatsApp con un mensaje para coordinar con el vendedor.</p>
+        <div id="entrega-whatsapp-wrap"></div>
+      </div>
+
+      <!-- 6 MENSAJES -->
+      <div class="screen" id="screen-mensajes">
+        <h3>Mensajes</h3>
+        <p class="screen-goal">Coordina la prenda aquí. La conversación queda guardada y se actualiza al momento.</p>
+        <div class="chat-shell" id="chat-shell">
+          <aside class="chat-list" id="chat-list"></aside>
+          <section class="chat-room">
+            <p class="chat-empty" id="chat-empty">Elige una conversación o toca «Me interesa» en una prenda.</p>
+            <div id="chat-active" hidden>
+              <div class="chat-safety">Por tu seguridad, mantén las conversaciones y pagos dentro de Ropero Vecinal. No compartas teléfonos ni links externos.</div>
+              <header class="chat-head">
+                <button type="button" class="btn outline chat-back" id="chat-back">Volver</button>
+                <div>
+                  <h4 id="chat-titulo">Conversación</h4>
+                  <small id="chat-sub"></small>
+                </div>
+                <button type="button" class="btn" id="btn-reservar">Comprar / Reservar prenda</button>
+              </header>
+              <div class="chat-log" id="chat-log"></div>
+              <form class="chat-compose" id="chat-form">
+                <input id="chat-input" maxlength="1000" placeholder="Escribe un mensaje" autocomplete="off">
+                <button class="btn" type="submit">Enviar</button>
+              </form>
+            </div>
+          </section>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<div class="modal-overlay" id="modal-auth" hidden>
+  <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="auth-titulo">
+    <h3 id="auth-titulo">Entra para continuar</h3>
+    <p class="screen-goal">Puedes mirar el catálogo sin cuenta. Para publicar, guardar una prenda o abrir el chat necesitamos saber quién eres.</p>
+    <div class="auth-tabs">
+      <button type="button" id="tab-crear" class="active">Crear cuenta</button>
+      <button type="button" id="tab-entrar">Iniciar sesión</button>
+    </div>
+    <form id="form-crear">
+      <div class="two-col">
+        <div class="field"><label for="auth-nombre">Nombre</label><input id="auth-nombre" type="text" required></div>
+        <div class="field"><label for="auth-apellido">Apellido</label><input id="auth-apellido" type="text" required></div>
+      </div>
+      <div class="field"><label for="auth-correo">Correo electrónico</label><input id="auth-correo" type="email" required></div>
+      <div class="field"><label for="auth-pass">Contraseña</label><div class="pass-row"><input id="auth-pass" type="password" minlength="6" required><button type="button" class="btn outline" id="ver-pass-crear">Ver</button></div></div>
+      <div class="field"><label for="auth-cel">Celular</label><input id="auth-cel" type="tel" inputmode="numeric" required></div>
+      <div class="field"><label for="auth-zona">Zona de San Miguel</label>
+        <select id="auth-zona" required>
+          <option value="">Selecciona tu zona</option>
+          <option>Costanera</option><option>Av. La Marina</option><option>Parque Central</option>
+          <option>La Mar / Universitaria</option><option>Riva Agüero</option><option>Bertolotto</option>
+        </select>
+      </div>
+      <p class="error-msg" id="auth-error-crear"></p>
+      <button class="btn verde block" type="submit">Crear cuenta y continuar</button>
+    </form>
+    <form id="form-entrar" hidden>
+      <div class="field"><label for="login-correo">Correo electrónico</label><input id="login-correo" type="email" required></div>
+      <div class="field"><label for="login-pass">Contraseña</label><div class="pass-row"><input id="login-pass" type="password" minlength="6" required><button type="button" class="btn outline" id="ver-pass-login">Ver</button></div></div>
+      <button type="button" class="datos-link" id="btn-olvide">¿Olvidaste tu contraseña?</button>
+      <div id="recuperar-box" hidden>
+        <p class="hint">En este prototipo no enviamos un correo. Si la cuenta existe, puedes definir una contraseña nueva aquí.</p>
+        <div class="field"><label for="nueva-pass">Nueva contraseña</label><input id="nueva-pass" type="password" minlength="6"></div>
+        <button type="button" class="btn outline" id="btn-nueva-pass">Guardar nueva contraseña</button>
+      </div>
+      <p class="error-msg" id="auth-error-login"></p>
+      <button class="btn verde block" type="submit">Entrar</button>
+    </form>
+    <div class="modal-actions"><button type="button" class="btn outline" id="auth-cerrar">Ahora no</button></div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="modal-venta" hidden>
+  <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="sv-titulo">
+    <h3 id="sv-titulo">Marcar como vendido</h3>
+    <p class="screen-goal" id="sv-ayuda"></p>
+    <div class="field" id="sv-comprador-wrap">
+      <label for="sv-comprador">Comprador</label>
+      <select id="sv-comprador"></select>
+    </div>
+    <div class="field" id="sv-otro-wrap">
+      <label for="sv-otro">Nombre del comprador</label>
+      <input type="text" id="sv-otro" placeholder="Ej. Lucía M." maxlength="60">
+    </div>
+    <div id="sv-resena">
+      <div class="field">
+        <label>Calificación del proceso</label>
+        <div class="star-picker" id="sv-estrellas" role="radiogroup" aria-label="Calificación de 1 a 5 estrellas"></div>
+      </div>
+      <div class="field">
+        <label for="sv-comentario">Comentario sobre el proceso</label>
+        <textarea id="sv-comentario" maxlength="400" placeholder="Ej. Puntual en el encuentro en Plaza San Miguel, la prenda estaba tal como en las fotos."></textarea>
+      </div>
+    </div>
+    <p class="error-msg" id="sv-error"></p>
+    <div class="modal-actions">
+      <button type="button" class="btn outline" id="sv-cancelar">Cancelar</button>
+      <button type="button" class="btn verde" id="sv-publicar">Publicar calificación</button>
+    </div>
+  </div>
+</div>
+
+<!-- COMISIÓN POR YAPE (para activar "vendido" y reseñas) -->
+<div class="modal-overlay" id="modal-comision" hidden>
+  <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="mc-titulo">
+    <h3 id="mc-titulo">Activa tus reseñas</h3>
+    <p class="screen-goal" id="mc-prenda"></p>
+    <div id="mc-pedir">
+      <p class="screen-goal">Para marcar tu prenda como <strong>vendida</strong> y que tu comprador pueda dejarte una <strong>reseña</strong>, realiza el pago de una comisión de <strong>S/ 1.00</strong>.</p>
+      <div class="yape-box">
+        <small>Yapea S/ 1.00 al número</small>
+        <strong id="mc-numero">991 007 281</strong>
+        <button type="button" class="btn outline" id="mc-copiar">Copiar número</button>
+      </div>
+      <ol class="yape-pasos">
+        <li>Yapea <b>S/ 1.00</b> al número de arriba.</li>
+        <li>En el mensaje del Yape escribe este código: <b id="mc-codigo"></b></li>
+        <li>Escribe aquí el <b>Nº de operación</b> que te muestra Yape y pulsa «Ya realicé el pago».</li>
+        <li>Verificamos tu pago y habilitamos tu botón de vendido.</li>
+      </ol>
+      <div class="field">
+        <label for="mc-operacion">Nº de operación de Yape</label>
+        <input type="text" id="mc-operacion" maxlength="30" inputmode="numeric" placeholder="Ej. 12345678">
+      </div>
+    </div>
+    <div id="mc-espera" hidden>
+      <p class="screen-goal">✓ Recibimos tu aviso de pago (operación <b id="mc-op-enviada"></b>). Lo estamos verificando; cuando se confirme podrás marcar tu prenda como vendida.</p>
+    </div>
+    <p class="error-msg" id="mc-error"></p>
+    <div class="modal-actions">
+      <button type="button" class="btn outline" id="mc-cerrar">Cerrar</button>
+      <button type="button" class="btn verde" id="mc-pagado">Ya realicé el pago</button>
+    </div>
+  </div>
+</div>
+
+<!-- ADMIN: PAGOS POR VERIFICAR -->
+<div class="modal-overlay" id="modal-pagos" hidden>
+  <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="mp-titulo">
+    <h3 id="mp-titulo">Pagos por verificar</h3>
+    <p class="screen-goal">Revisa en tu Yape que hayan llegado S/ 1.00 con el código y Nº de operación indicados.</p>
+    <div id="mp-lista"></div>
+    <div class="modal-actions">
+      <button type="button" class="btn outline" id="mp-cerrar">Cerrar</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="modal-vendedor" hidden>
+  <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="rep-nombre">
+    <div class="rep-head">
+      <div class="rep-avatar" id="rep-avatar"></div>
+      <div>
+        <h3 id="rep-nombre" style="margin:0;"></h3>
+        <span class="verificado">✓ Vendedor Verificado</span>
+        <span class="loc-badge" id="rep-zona" hidden></span>
+      </div>
+    </div>
+    <h4 style="margin:0 0 4px;">Reputación y reseñas</h4>
+    <div class="rep-score" id="rep-score"></div>
+    <div id="rep-lista"></div>
+    <div class="modal-actions"><button type="button" class="btn outline" id="rep-cerrar">Cerrar</button></div>
+  </div>
+</div>
+
+<div class="lightbox" id="lightbox" hidden>
+  <button type="button" class="lightbox-x" id="lightbox-cerrar">Cerrar</button>
+  <img id="lightbox-img" alt="Foto ampliada de la prenda">
+</div>
+
+<div class="modal-overlay" id="modal-datos" hidden>
+  <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="modal-datos-titulo">
+    <h3 id="modal-datos-titulo">Mis datos</h3>
+    <p class="screen-goal" id="modal-datos-ayuda">Puedes actualizar tu nombre, WhatsApp y preferencia de entrega. Se guardan en este navegador.</p>
+    <div class="field">
+      <label for="modal-nombre">Nombre</label>
+      <input type="text" id="modal-nombre" placeholder="Ej. Camila R." autocomplete="name">
+    </div>
+    <div class="field">
+      <label for="modal-telefono">WhatsApp</label>
+      <input type="tel" id="modal-telefono" placeholder="Ej. 987 654 321" inputmode="numeric" autocomplete="tel">
+    </div>
+    <div class="field">
+      <label>Preferencia de entrega</label>
+      <div class="pill-group" id="modal-entrega-group">
+        <button type="button" class="pill" data-entrega="Punto público seguro">Punto público seguro</button>
+        <button type="button" class="pill" data-entrega="Envío motorizado">Envío motorizado</button>
+      </div>
+    </div>
+    <p class="error-msg" id="modal-datos-error">Completa tu nombre, un WhatsApp de 9 dígitos y tu preferencia de entrega.</p>
+    <div class="modal-actions">
+      <button type="button" class="btn outline" id="modal-datos-cerrar">Cancelar</button>
+      <button type="button" class="btn" id="modal-datos-guardar">Guardar</button>
+    </div>
+  </div>
+</div>
+
+<div class="wa-float">
+  <span class="wa-tooltip">¿Tienes algún problema?<br>Escríbenos</span>
+  <a class="wa-float-btn" href="https://wa.me/51976969693" target="_blank" rel="noopener" aria-label="¿Tienes algún problema? Escríbenos por WhatsApp">
+    <svg width="28" height="28" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12.04 2C6.58 2 2.13 6.45 2.13 11.91c0 1.75.46 3.45 1.32 4.95L2.05 22l5.25-1.38a9.9 9.9 0 0 0 4.74 1.21h.01c5.46 0 9.9-4.45 9.9-9.91 0-2.65-1.03-5.14-2.9-7.01A9.82 9.82 0 0 0 12.04 2m0 1.67c2.2 0 4.27.86 5.82 2.42a8.2 8.2 0 0 1 2.42 5.82c0 4.54-3.7 8.24-8.25 8.24a8.2 8.2 0 0 1-4.19-1.15l-.3-.18-3.12.82.83-3.04-.2-.31a8.18 8.18 0 0 1-1.26-4.38c0-4.55 3.7-8.24 8.25-8.24M8.53 7.1c-.17 0-.45.06-.68.32-.23.25-.9.87-.9 2.13 0 1.26.92 2.47 1.04 2.64.13.17 1.78 2.85 4.42 3.89 2.19.86 2.63.69 3.11.65.48-.04 1.55-.63 1.77-1.24.22-.61.22-1.13.15-1.24-.06-.11-.24-.17-.5-.3-.26-.13-1.55-.77-1.79-.86-.24-.09-.42-.13-.59.13-.17.26-.68.86-.83 1.04-.15.17-.31.19-.57.06-.26-.13-1.09-.4-2.08-1.28-.77-.68-1.29-1.53-1.44-1.79-.15-.26-.02-.4.11-.53.12-.12.26-.31.39-.47.13-.15.17-.26.26-.43.09-.17.04-.32-.02-.45C9.5 7.9 9 6.72 8.75 6.2c-.19-.4-.4-.4-.59-.4Z"/></svg>
+  </a>
+</div>
+
+<footer>Prototipo interactivo — Ropero Vecinal, San Miguel.</footer>
+
+<!-- ============ FIREBASE SDK (compat) ============ -->
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore-compat.js"></script>
+<script>
+  // ============ CONFIGURACIÓN DE FIREBASE ============
+  // Reemplaza estos valores con las llaves de tu proyecto (Configuración del proyecto > Tus apps > SDK de Firebase).
+  const firebaseConfig = {
+    apiKey: "AIzaSyDmnrsKhUexn9KvKEBAVEqvfSWXJg_gIds",
+    authDomain: "ropero-vecinal.firebaseapp.com",
+    projectId: "ropero-vecinal",
+    storageBucket: "ropero-vecinal.firebasestorage.app",
+    messagingSenderId: "1019753485602",
+    appId: "1:1019753485602:web:7b5a015c3689861296817b"
+  };
+
+  // La coordinación entre comprador y vendedor se hace solo por WhatsApp.
+  // El chat interno queda apagado (su código se conserva por si se necesita revisar).
+  const CHAT_ACTIVO = false;
+  // Comisión de S/ 1 por Yape para activar «vendido» y reseñas. APAGADA durante el piloto:
+  // se reactivará solo si los experimentos muestran que los vendedores sí pagarían.
+  const COMISION_ACTIVA = false;
+
+  function firebaseConfigEsReal(cfg){
+    if(!cfg || !cfg.apiKey || !cfg.projectId || !cfg.appId) return false;
+    const marcadores = ['TU_API_KEY', 'TU_PROYECTO', 'TU_SENDER_ID', 'TU_APP_ID'];
+    return !Object.values(cfg).some(function(v){
+      return typeof v === 'string' && marcadores.some(function(m){ return v.indexOf(m) !== -1; });
+    });
+  }
+
+  let db = null;
+  let firebaseListo = false;
+  if(!firebaseConfigEsReal(firebaseConfig)){
+    console.warn('firebaseConfig sigue con valores de ejemplo. Las prendas se guardan en este navegador.');
+  } else {
+    try {
+      firebase.initializeApp(firebaseConfig);
+      db = firebase.firestore();
+      firebaseListo = true;
+    } catch (err) {
+      console.warn('Firebase no se pudo inicializar. Se usará almacenamiento local.', err);
+    }
+  }
+</script>
+
+<script>
+(function(){
+  const WHATSAPP_ICON = '<svg width="17" height="17" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12.04 2C6.58 2 2.13 6.45 2.13 11.91c0 1.75.46 3.45 1.32 4.95L2.05 22l5.25-1.38a9.9 9.9 0 0 0 4.74 1.21h.01c5.46 0 9.9-4.45 9.9-9.91 0-2.65-1.03-5.14-2.9-7.01A9.82 9.82 0 0 0 12.04 2m0 1.67c2.2 0 4.27.86 5.82 2.42a8.2 8.2 0 0 1 2.42 5.82c0 4.54-3.7 8.24-8.25 8.24a8.2 8.2 0 0 1-4.19-1.15l-.3-.18-3.12.82.83-3.04-.2-.31a8.18 8.18 0 0 1-1.26-4.38c0-4.55 3.7-8.24 8.25-8.24M8.53 7.1c-.17 0-.45.06-.68.32-.23.25-.9.87-.9 2.13 0 1.26.92 2.47 1.04 2.64.13.17 1.78 2.85 4.42 3.89 2.19.86 2.63.69 3.11.65.48-.04 1.55-.63 1.77-1.24.22-.61.22-1.13.15-1.24-.06-.11-.24-.17-.5-.3-.26-.13-1.55-.77-1.79-.86-.24-.09-.42-.13-.59.13-.17.26-.68.86-.83 1.04-.15.17-.31.19-.57.06-.26-.13-1.09-.4-2.08-1.28-.77-.68-1.29-1.53-1.44-1.79-.15-.26-.02-.4.11-.53.12-.12.26-.31.39-.47.13-.15.17-.26.26-.43.09-.17.04-.32-.02-.45C9.5 7.9 9 6.72 8.75 6.2c-.19-.4-.4-.4-.59-.4Z"/></svg>';
+  let prendaActual = null;
+
+  // ============ PERFIL / SESIÓN (localStorage) ============
+  const PERFIL_KEY = 'ropero_vecinal_perfil';
+  function cargarPerfilLocal(){
+    try{
+      const raw = localStorage.getItem(PERFIL_KEY);
+      return raw ? JSON.parse(raw) : null;
+    }catch(err){
+      console.warn('No se pudo leer el perfil de localStorage', err);
+      return null;
+    }
+  }
+  function guardarPerfilLocal(perfil){
+    try{ localStorage.setItem(PERFIL_KEY, JSON.stringify(perfil)); }catch(err){ console.warn('No se pudo guardar el perfil en localStorage', err); }
+  }
+  let miPerfil = cargarPerfilLocal(); // {nombre, zona, telefono, preferenciaEntrega}
+
+  const KEY_NOMBRE = 'usuarioNombre';
+  const KEY_TELEFONO = 'usuarioTelefono';
+  const KEY_ENTREGA = 'usuarioPreferenciaEntrega';
+  const ENTREGAS = ['Punto público seguro', 'Envío motorizado'];
+
+  function telefonoSoloDigitos(valor){
+    return String(valor || '').replace(/\D/g, '');
+  }
+  function telefonoEsValido(valor){
+    const raw = telefonoSoloDigitos(valor);
+    return /^9\d{8}$/.test(raw) || /^\d{9}$/.test(raw);
+  }
+  function preferenciaValida(valor){
+    return ENTREGAS.indexOf(valor) !== -1;
+  }
+  function sincronizarClavesUsuario(){
+    if(!miPerfil) return;
+    try{
+      if(miPerfil.nombre && !localStorage.getItem(KEY_NOMBRE)) localStorage.setItem(KEY_NOMBRE, miPerfil.nombre);
+      if(miPerfil.telefono && !localStorage.getItem(KEY_TELEFONO)) localStorage.setItem(KEY_TELEFONO, miPerfil.telefono);
+      if(miPerfil.preferenciaEntrega && !localStorage.getItem(KEY_ENTREGA)) localStorage.setItem(KEY_ENTREGA, miPerfil.preferenciaEntrega);
+    }catch(err){ console.warn('No se pudieron sincronizar los datos del usuario', err); }
+  }
+  function leerDatosUsuario(){
+    let nombre = '', telefono = '', preferencia = '';
+    try{
+      nombre = localStorage.getItem(KEY_NOMBRE) || (miPerfil && miPerfil.nombre) || '';
+      telefono = localStorage.getItem(KEY_TELEFONO) || (miPerfil && miPerfil.telefono) || '';
+      preferencia = localStorage.getItem(KEY_ENTREGA) || (miPerfil && miPerfil.preferenciaEntrega) || '';
+    }catch(err){ /* noop */ }
+    return { nombre: String(nombre).trim(), telefono: telefonoSoloDigitos(telefono), preferencia };
+  }
+  function datosInteresListos(){
+    const datos = leerDatosUsuario();
+    return !!(datos.nombre && telefonoEsValido(datos.telefono) && preferenciaValida(datos.preferencia));
+  }
+  function persistirDatosUsuario(datos){
+    const zona = (miPerfil && miPerfil.zona) || '';
+    miPerfil = {
+      nombre: datos.nombre,
+      apellido: (miPerfil && miPerfil.apellido) || '',
+      correo: (miPerfil && miPerfil.correo) || '',
+      zona,
+      telefono: telefonoSoloDigitos(datos.telefono),
+      preferenciaEntrega: datos.preferencia
+    };
+    guardarPerfilLocal(miPerfil);
+    try{
+      localStorage.setItem(KEY_NOMBRE, miPerfil.nombre);
+      localStorage.setItem(KEY_TELEFONO, miPerfil.telefono);
+      localStorage.setItem(KEY_ENTREGA, miPerfil.preferenciaEntrega);
+    }catch(err){ console.warn('No se pudieron guardar usuarioNombre, usuarioTelefono o usuarioPreferenciaEntrega', err); }
+    sincronizarCuenta({ nombre: miPerfil.nombre, telefono: miPerfil.telefono });
+  }
+  sincronizarClavesUsuario();
+
+  const USER_ID_KEY = 'ropero_vecinal_user_id';
+  function obtenerUserId(){
+    let id = null;
+    try{ id = localStorage.getItem(USER_ID_KEY); }catch(err){ id = null; }
+    if(!id){
+      id = 'user_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 10);
+      try{ localStorage.setItem(USER_ID_KEY, id); }catch(err){ console.warn('No se pudo guardar userId', err); }
+    }
+    return id;
+  }
+  let miUserId = obtenerUserId();
+
+  function obtenerCompradorId(){
+    return miUserId || obtenerUserId();
+  }
+
+  function estaRegistrado(){ return !!(miPerfil && miPerfil.nombre && miPerfil.apellido && miPerfil.correo && miPerfil.zona && miPerfil.telefono); }
+
+  function autocompletarRegistro(){
+    if(!miPerfil) return;
+    if(miPerfil.nombre) document.getElementById('reg-nombre').value = miPerfil.nombre;
+    if(miPerfil.apellido) document.getElementById('reg-apellido').value = miPerfil.apellido;
+    if(miPerfil.correo) document.getElementById('reg-correo').value = miPerfil.correo;
+    if(miPerfil.zona) document.getElementById('reg-zona').value = miPerfil.zona;
+    if(miPerfil.telefono) document.getElementById('reg-whatsapp').value = miPerfil.telefono;
+    if(estaRegistrado()) document.getElementById('btn-crear-perfil').textContent = 'Guardar cambios';
+    document.getElementById('reg-correo').readOnly = !!(isLoggedIn && currentUser);
+  }
+  function limpiarRegistro(){
+    ['reg-nombre','reg-apellido','reg-correo','reg-zona','reg-whatsapp'].forEach(id => { document.getElementById(id).value = ''; });
+    document.getElementById('reg-correo').readOnly = false;
+    document.getElementById('btn-crear-perfil').textContent = 'Crear perfil y continuar';
+  }
+  // Mantiene la cuenta guardada (ropero_cuentas) alineada con ediciones de perfil.
+  function sincronizarCuenta(cambios){
+    if(!(isLoggedIn && currentUser)) return;
+    Object.assign(currentUser, cambios);
+    const cuentas = leerCuentas();
+    const i = cuentas.findIndex(c => c.correo === currentUser.correo);
+    if(i >= 0){ Object.assign(cuentas[i], cambios); guardarCuentas(cuentas); }
+    pintarSesion();
+  }
+
+  const tabs = document.querySelectorAll('.tab-pill[data-screen]');
+  const screens = document.querySelectorAll('.screen');
+  const CUENTAS_KEY = 'ropero_cuentas';
+  const SESION_KEY = 'ropero_sesion';
+  let isLoggedIn = false;
+  let currentUser = null;
+  let showAuthModal = false;
+  let accionPendiente = null;
+
+  function sesionActiva(){ return !!(isLoggedIn && currentUser); }
+
+  async function hashClave(texto){
+    const bytes = new TextEncoder().encode(String(texto));
+    if(window.crypto && crypto.subtle){
+      const buf = await crypto.subtle.digest('SHA-256', bytes);
+      return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2,'0')).join('');
+    }
+    let h = 0;
+    for(let i = 0; i < texto.length; i++) h = Math.imul(h ^ texto.charCodeAt(i), 16777619);
+    return 'fb_' + (h >>> 0).toString(16);
+  }
+  function leerCuentas(){
+    try{ return JSON.parse(localStorage.getItem(CUENTAS_KEY) || '[]'); }catch(err){ return []; }
+  }
+  function guardarCuentas(lista){
+    localStorage.setItem(CUENTAS_KEY, JSON.stringify(lista));
+  }
+  function aplicarUsuario(cuenta){
+    currentUser = cuenta;
+    isLoggedIn = true;
+    miUserId = cuenta.userId;
+    try{ localStorage.setItem(USER_ID_KEY, cuenta.userId); localStorage.setItem(SESION_KEY, cuenta.correo); }catch(err){}
+    miPerfil = {
+      nombre: cuenta.nombre,
+      apellido: cuenta.apellido,
+      correo: cuenta.correo,
+      zona: cuenta.zona,
+      telefono: cuenta.telefono,
+      preferenciaEntrega: (miPerfil && miPerfil.preferenciaEntrega) || localStorage.getItem(KEY_ENTREGA) || ''
+    };
+    guardarPerfilLocal(miPerfil);
+    try{
+      localStorage.setItem(KEY_NOMBRE, cuenta.nombre);
+      localStorage.setItem(KEY_TELEFONO, cuenta.telefono);
+    }catch(err){}
+    pintarSesion();
+    autocompletarRegistro();
+  }
+  function pintarSesion(){
+    const entrar = document.getElementById('btn-entrar');
+    const menu = document.getElementById('user-menu');
+    if(sesionActiva()){
+      entrar.hidden = true;
+      menu.hidden = false;
+      const ini = (currentUser.nombre[0] || '') + (currentUser.apellido[0] || '');
+      document.getElementById('user-iniciales').textContent = ini.toUpperCase();
+      document.getElementById('user-corto').textContent = currentUser.nombre;
+    }else{
+      entrar.hidden = false;
+      menu.hidden = true;
+      document.getElementById('user-drop').hidden = true;
+    }
+  }
+  function abrirAuth(tab){
+    showAuthModal = true;
+    document.getElementById('modal-auth').hidden = false;
+    const crear = tab !== 'entrar';
+    document.getElementById('auth-error-crear').classList.remove('show');
+    document.getElementById('auth-error-login').classList.remove('show');
+    document.getElementById('form-crear').hidden = !crear;
+    document.getElementById('form-entrar').hidden = crear;
+    document.getElementById('tab-crear').classList.toggle('active', crear);
+    document.getElementById('tab-entrar').classList.toggle('active', !crear);
+  }
+  function cerrarAuth(){
+    showAuthModal = false;
+    document.getElementById('modal-auth').hidden = true;
+  }
+  function pedirSesion(accion){
+    if(sesionActiva()){ accion(); return; }
+    accionPendiente = accion;
+    abrirAuth('crear');
+  }
+  function continuarPendiente(){
+    const accion = accionPendiente;
+    accionPendiente = null;
+    cerrarAuth();
+    if(accion) accion();
+  }
+  function restaurarSesion(){
+    const correo = localStorage.getItem(SESION_KEY);
+    if(!correo){ pintarSesion(); return; }
+    const cuenta = leerCuentas().find(c => c.correo === correo);
+    if(!cuenta){ pintarSesion(); return; }
+    aplicarUsuario(cuenta);
+  }
+
+  function showScreen(name){
+    if(name === 'mensajes' && !CHAT_ACTIVO) return;
+    if((name === 'publicar' || name === 'mensajes' || name === 'registro') && !sesionActiva()){
+      pedirSesion(() => showScreen(name));
+      return;
+    }
+    screens.forEach(s => s.classList.toggle('active', s.id === 'screen-'+name));
+    tabs.forEach(t => t.classList.toggle('active', t.dataset.screen === name));
+    document.body.classList.toggle('chat-abierto', name === 'mensajes');
+    if(name === 'entrega') marcarEntregaGuardada();
+    if(name === 'mensajes') entrarAMensajes();
+    document.querySelector('.proto').scrollIntoView({behavior:'smooth', block:'start'});
+  }
+  tabs.forEach(t => t.addEventListener('click', () => showScreen(t.dataset.screen)));
+  document.getElementById('btn-hero-cta').addEventListener('click', () => pedirSesion(() => showScreen('publicar')));
+  document.getElementById('btn-publicar-nav').addEventListener('click', () => pedirSesion(() => showScreen('publicar')));
+  document.getElementById('btn-entrar').addEventListener('click', () => abrirAuth('entrar'));
+  document.getElementById('btn-user').addEventListener('click', () => {
+    const drop = document.getElementById('user-drop');
+    drop.hidden = !drop.hidden;
+    actualizarMenuPagos();
+  });
+  document.getElementById('menu-publicaciones').addEventListener('click', () => {
+    document.getElementById('user-drop').hidden = true;
+    soloMias = true;
+    soloPendientes = false;
+    renderCatalog();
+    showScreen('catalogo');
+  });
+  document.getElementById('menu-pendientes').addEventListener('click', () => {
+    document.getElementById('user-drop').hidden = true;
+    soloPendientes = true;
+    soloMias = false;
+    renderCatalog();
+    showScreen('catalogo');
+  });
+  document.getElementById('menu-pagos').addEventListener('click', () => { document.getElementById('user-drop').hidden = true; abrirModalPagos(); });
+  document.getElementById('mp-cerrar').addEventListener('click', () => { document.getElementById('modal-pagos').hidden = true; });
+  document.getElementById('mc-cerrar').addEventListener('click', () => cerrarModalComision());
+  document.getElementById('mc-pagado').addEventListener('click', () => avisarPagoRealizado());
+  document.getElementById('mc-copiar').addEventListener('click', (e) => {
+    const b = e.currentTarget;
+    const listo = () => { b.textContent = '✓ Copiado'; setTimeout(() => { b.textContent = 'Copiar número'; }, 1800); };
+    if(navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(YAPE_NUMERO).then(listo).catch(() => {});
+    else listo();
+  });
+  document.getElementById('menu-mensajes').addEventListener('click', () => { document.getElementById('user-drop').hidden = true; showScreen('mensajes'); });
+  document.getElementById('menu-perfil').addEventListener('click', () => { document.getElementById('user-drop').hidden = true; showScreen('registro'); });
+  document.getElementById('menu-salir').addEventListener('click', () => {
+    document.getElementById('user-drop').hidden = true;
+    isLoggedIn = false;
+    currentUser = null;
+    miPerfil = null;
+    soloMias = false;
+    try{
+      localStorage.removeItem(SESION_KEY);
+      localStorage.removeItem(USER_ID_KEY);
+      localStorage.removeItem(PERFIL_KEY);
+      localStorage.removeItem(KEY_NOMBRE);
+      localStorage.removeItem(KEY_TELEFONO);
+      localStorage.removeItem(KEY_ENTREGA);
+    }catch(err){}
+    miUserId = obtenerUserId();
+    pintarSesion();
+    limpiarRegistro();
+    reiniciarChat();
+    renderCatalog();
+    showScreen('catalogo');
+  });
+  document.addEventListener('click', (e) => {
+    const menu = document.getElementById('user-menu');
+    if(menu && !menu.contains(e.target)) document.getElementById('user-drop').hidden = true;
+  });
+  document.addEventListener('keydown', (e) => {
+    if(e.key !== 'Escape') return;
+    document.getElementById('user-drop').hidden = true;
+    if(showAuthModal){ accionPendiente = null; cerrarAuth(); }
+  });
+  document.getElementById('modal-auth').addEventListener('click', (e) => {
+    if(e.target.id === 'modal-auth'){ accionPendiente = null; cerrarAuth(); }
+  });
+  document.getElementById('auth-cerrar').addEventListener('click', () => { accionPendiente = null; cerrarAuth(); });
+  document.getElementById('tab-crear').addEventListener('click', () => abrirAuth('crear'));
+  document.getElementById('tab-entrar').addEventListener('click', () => abrirAuth('entrar'));
+  function alternarPass(inputId, btn){
+    const input = document.getElementById(inputId);
+    const oculto = input.type === 'password';
+    input.type = oculto ? 'text' : 'password';
+    btn.textContent = oculto ? 'Ocultar' : 'Ver';
+  }
+  document.getElementById('ver-pass-crear').addEventListener('click', (e) => alternarPass('auth-pass', e.currentTarget));
+  document.getElementById('ver-pass-login').addEventListener('click', (e) => alternarPass('login-pass', e.currentTarget));
+  document.getElementById('btn-olvide').addEventListener('click', () => {
+    document.getElementById('recuperar-box').hidden = false;
+  });
+  document.getElementById('form-crear').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const error = document.getElementById('auth-error-crear');
+    const nombre = document.getElementById('auth-nombre').value.trim();
+    const apellido = document.getElementById('auth-apellido').value.trim();
+    const correo = document.getElementById('auth-correo').value.trim().toLowerCase();
+    const pass = document.getElementById('auth-pass').value;
+    const telefono = document.getElementById('auth-cel').value.replace(/\D/g,'');
+    const zona = document.getElementById('auth-zona').value;
+    const correoOk = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(correo);
+    const telOk = /^9\d{8}$/.test(telefono) || /^\d{9}$/.test(telefono);
+    if(!nombre || !apellido || !correoOk || pass.length < 6 || !telOk || !zona){
+      error.textContent = 'Revisa el correo, una contraseña de al menos 6 caracteres, el celular y la zona.';
+      error.classList.add('show');
+      return;
+    }
+    const cuentas = leerCuentas();
+    if(cuentas.some(c => c.correo === correo)){
+      error.textContent = 'Ese correo ya tiene cuenta. Entra con tu contraseña.';
+      error.classList.add('show');
+      abrirAuth('entrar');
+      document.getElementById('login-correo').value = correo;
+      return;
+    }
+    const cuenta = { correo, passHash: await hashClave(pass), nombre, apellido, telefono, zona, userId: 'user_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 8) };
+    cuentas.push(cuenta);
+    guardarCuentas(cuentas);
+    aplicarUsuario(cuenta);
+    const vinculadas = await vincularPrendasPorTelefono(cuenta);
+    reiniciarChat();
+    renderCatalog();
+    if(vinculadas) alert('Encontramos ' + vinculadas + (vinculadas === 1 ? ' prenda publicada' : ' prendas publicadas') + ' con tu número y ya están en tu cuenta.');
+    if(firebaseListo && db){
+      db.collection('usuarios').add({ nombre, apellido, correo, telefono, zona, userId: cuenta.userId, creado: firebase.firestore.FieldValue.serverTimestamp() }).catch(() => {});
+    }
+    continuarPendiente();
+  });
+  document.getElementById('form-entrar').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const error = document.getElementById('auth-error-login');
+    const correo = document.getElementById('login-correo').value.trim().toLowerCase();
+    const pass = document.getElementById('login-pass').value;
+    const cuenta = leerCuentas().find(c => c.correo === correo);
+    if(!cuenta || cuenta.passHash !== await hashClave(pass)){
+      error.textContent = 'Correo o contraseña incorrectos.';
+      error.classList.add('show');
+      return;
+    }
+    aplicarUsuario(cuenta);
+    reiniciarChat();
+    renderCatalog();
+    continuarPendiente();
+  });
+  document.getElementById('btn-nueva-pass').addEventListener('click', async () => {
+    const error = document.getElementById('auth-error-login');
+    const correo = document.getElementById('login-correo').value.trim().toLowerCase();
+    const pass = document.getElementById('nueva-pass').value;
+    const cuentas = leerCuentas();
+    const cuenta = cuentas.find(c => c.correo === correo);
+    if(!cuenta || pass.length < 6){
+      error.textContent = 'Escribe el correo de la cuenta y una contraseña nueva de al menos 6 caracteres.';
+      error.classList.add('show');
+      return;
+    }
+    cuenta.passHash = await hashClave(pass);
+    guardarCuentas(cuentas);
+    error.textContent = 'Contraseña actualizada. Ya puedes entrar.';
+    error.classList.add('show');
+  });
+
+  restaurarSesion();
+  autocompletarRegistro();
+
+  let soloMias = false;
+  let soloPendientes = false;
+  let clicsInteres = 0;
+  const conteoModalidad = {venta:0, intercambio:0, donacion:0};
+
+  // Catálogo: Firestore cuando está configurado; si no, localStorage.
+  const prendas = [];
+  const PRENDAS_KEY = 'ropero_vecinal_prendas';
+  // false mientras no haya llegado ni siquiera una copia del catálogo: se muestran tarjetas de carga.
+  let catalogoListo = false;
+
+  function guardarPrendasLocal(){
+    try{
+      // Con Firebase, la copia local es solo para abrir rápido: sin fotos completas (pesan MB), solo miniaturas.
+      const lista = firebaseListo ? prendas.map(p => Object.assign({}, p, { foto: null, fotos: null })) : prendas;
+      localStorage.setItem(PRENDAS_KEY, JSON.stringify(lista));
+      return true;
+    }catch(err){
+      console.warn('No se pudieron guardar las prendas en localStorage', err);
+      return false;
+    }
+  }
+
+  function cargarPrendasLocal(){
+    try{
+      const raw = localStorage.getItem(PRENDAS_KEY);
+      const arr = raw ? JSON.parse(raw) : [];
+      if(!Array.isArray(arr)) return false;
+      prendas.length = 0;
+      prendas.push(...arr);
+      return true;
+    }catch(err){
+      console.warn('No se pudieron leer las prendas de localStorage', err);
+      return false;
+    }
+  }
+
+  async function hashImagen(data){
+    const texto = String(data || '');
+    try{
+      if(window.crypto && crypto.subtle){
+        const bytes = new TextEncoder().encode(texto);
+        const buf = await crypto.subtle.digest('SHA-256', bytes);
+        return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('');
+      }
+    }catch(err){
+      console.warn('SHA-256 no disponible, se usa una huella de respaldo', err);
+    }
+    let h1 = 0x811c9dc5, h2 = 0x811c9dc5;
+    for(let i = 0; i < texto.length; i++){
+      h1 ^= texto.charCodeAt(i);
+      h1 = Math.imul(h1, 0x01000193);
+      h2 ^= texto.charCodeAt(texto.length - 1 - i);
+      h2 = Math.imul(h2, 0x01000193);
+    }
+    const hex = (n) => (n >>> 0).toString(16).padStart(8, '0');
+    return 'fb_' + hex(h1) + hex(h2) + hex(texto.length);
+  }
+
+  async function asegurarHashes(){
+    let cambio = false;
+    for(const p of prendas){
+      if(!p.fotoHash && p.foto){
+        p.fotoHash = await hashImagen(p.foto);
+        cambio = true;
+      }
+    }
+    return cambio;
+  }
+
+  function imagenYaPublicada(hash, dataUrl){
+    return prendas.some(p => (hash && p.fotoHash && p.fotoHash === hash) || (dataUrl && p.foto && p.foto === dataUrl));
+  }
+
+  const modoLabel = {venta:'Venta', intercambio:'Intercambio', donacion:'Donación'};
+
+  function updateFilterOptions(){
+    const cats = [...new Set(prendas.map(p=>p.cat))];
+    const tallas = [...new Set(prendas.map(p=>p.talla))];
+    document.getElementById('f-cat').innerHTML = '<option value="">Categoría</option>' + cats.map(c=>`<option>${c}</option>`).join('');
+    document.getElementById('f-talla').innerHTML = '<option value="">Talla</option>' + tallas.map(t=>`<option>${t}</option>`).join('');
+  }
+
+  const ADMIN_NOMBRE = ''; // retirado del repositorio público
+  const ADMIN_TELEFONO = ''; // retirado del repositorio público
+  function rolDe(cuenta){
+    if(!ADMIN_NOMBRE && !ADMIN_TELEFONO) return 'user';
+    const nombre = ((cuenta.nombre || '') + ' ' + (cuenta.apellido || '')).replace(/\s+/g, ' ').trim().toUpperCase();
+    return (nombre === ADMIN_NOMBRE || String(cuenta.telefono || '').replace(/\D/g, '').endsWith(ADMIN_TELEFONO)) ? 'admin' : 'user';
+  }
+  function esAdmin(){
+    return sesionActiva() && rolDe(currentUser) === 'admin';
+  }
+
+  function esPrendaPropia(p){
+    return !!(sesionActiva() && p && p.userId && miUserId && String(p.userId) === String(miUserId));
+  }
+
+  function puedeEliminar(p){
+    return esPrendaPropia(p) || esAdmin();
+  }
+
+  // ============ VENDIDO + RESEÑAS ============
+  const RESENAS_KEY = 'ropero_vecinal_resenas';
+  let resenas = [];
+  function estaVendida(p){ return !!p && p.status === 'sold'; }
+  function puedeMarcarVendido(p){ return !estaVendida(p) && (esPrendaPropia(p) || esAdmin()); }
+  function tieneResena(p){ return resenas.some(r => r.prendaId === p.id); }
+  // El comprador (cuenta registrada elegida al marcar la venta) califica al vendedor.
+  function puedeCalificarComoComprador(p){
+    return estaVendida(p) && sesionActiva() && !!p.buyerId && String(p.buyerId) === String(miUserId)
+      && !esPrendaPropia(p) && !tieneResena(p);
+  }
+  // Respaldo solo para el admin: compradores sin cuenta (escritos a mano al vender).
+  function puedeCalificar(p){
+    return estaVendida(p) && esAdmin() && !p.buyerId && !tieneResena(p);
+  }
+  function cargarResenasLocal(){
+    try{
+      const arr = JSON.parse(localStorage.getItem(RESENAS_KEY) || '[]');
+      resenas = Array.isArray(arr) ? arr : [];
+    }catch(err){ resenas = []; }
+  }
+  function guardarResenasLocal(){
+    try{ localStorage.setItem(RESENAS_KEY, JSON.stringify(resenas)); }catch(err){ console.warn('No se pudieron guardar las reseñas', err); }
+  }
+  function estrellasHtml(n){
+    const r = Math.max(0, Math.min(5, Math.round(n)));
+    return '<span class="stars" aria-label="' + r + ' de 5 estrellas">' + '★'.repeat(r) + '☆'.repeat(5 - r) + '</span>';
+  }
+  function fechaCorta(iso){
+    const ms = Date.parse(iso);
+    return Number.isNaN(ms) ? '' : new Date(ms).toLocaleDateString('es-PE', { day:'2-digit', month:'short', year:'numeric' });
+  }
+
+  function marcarVendida(p, comprador){
+    p.status = 'sold';
+    p.soldAt = new Date().toISOString();
+    p.buyerId = (comprador && comprador.id) || null;
+    p.buyerName = (comprador && comprador.nombre) || '';
+    guardarPrendasLocal();
+    const idNube = p.id && String(p.id).indexOf('local_') !== 0;
+    if(firebaseListo && db && idNube){
+      db.collection('prendas').doc(p.id).update({ status: 'sold', soldAt: p.soldAt, buyerId: p.buyerId, buyerName: p.buyerName })
+        .catch(err => { console.error('Error marcando como vendida en Firestore:', err); alert('La prenda se marcó como vendida en este navegador, pero no se pudo guardar en la nube. Revisa los permisos de Firestore.'); });
+    }
+  }
+  function guardarResena(r){
+    resenas.push(r);
+    guardarResenasLocal();
+    if(firebaseListo && db){
+      db.collection('resenas').doc(r.id).set(r).catch(err => console.error('Error guardando reseña en Firestore:', err));
+    }
+  }
+  function refrescarTrasVenta(p){
+    updateFilterOptions();
+    renderCatalog();
+    if(prendaActual && prendaActual.id === p.id) renderInteres(p);
+  }
+
+  // Modal "Marcar como vendido" / "Calificar"
+  let ventaPrenda = null;
+  let ventaModo = 'vender'; // 'vender' | 'resenar'
+  let ventaEstrellas = 0;
+  function compradoresInteresados(p){
+    const vistos = new Map();
+    conversaciones.forEach(c => {
+      if(c.product_id === p.id && c.buyer_id && c.buyer_id !== p.userId) vistos.set(c.buyer_id, c.buyer_name || 'Comprador');
+    });
+    return Array.from(vistos, ([id, nombre]) => ({ id, nombre }));
+  }
+  // Compradores que marcaron "Me interesa" en la prenda (colección `interesados`).
+  // Se suman los del chat anterior (si los hubiera) para no perder a nadie.
+  async function interesadosDe(p){
+    const mapa = new Map(compradoresInteresados(p).map(c => [c.id, c.nombre]));
+    if(firebaseListo && db && p.id && String(p.id).indexOf('local_') !== 0){
+      try{
+        const snap = await db.collection('interesados').where('prendaId', '==', p.id).get();
+        snap.forEach(doc => {
+          const x = doc.data() || {};
+          if(x.compradorId && x.compradorId !== p.userId) mapa.set(x.compradorId, x.compradorNombre || 'Comprador');
+        });
+      }catch(err){ console.error('No se pudieron leer los interesados:', err); }
+    }
+    return Array.from(mapa, ([id, nombre]) => ({ id, nombre }));
+  }
+
+  // ============ COMISIÓN POR YAPE ============
+  const YAPE_NUMERO = '991007281';
+  const COMISION_SOLES = 1;
+  function comisionPagada(p){ return !!p && p.comisionEstado === 'pagada'; }
+  function comisionPendiente(p){ return !!p && p.comisionEstado === 'pendiente'; }
+  function codigoPago(p){ return 'RV-' + String(p.id || '').replace(/[^a-zA-Z0-9]/g, '').slice(0, 5).toUpperCase(); }
+  let comisionPrenda = null;
+  function actualizarPrendaNube(p, campos){
+    Object.assign(p, campos);
+    guardarPrendasLocal();
+    const idNube = p.id && String(p.id).indexOf('local_') !== 0;
+    if(firebaseListo && db && idNube){
+      return db.collection('prendas').doc(p.id).update(campos);
+    }
+    return Promise.resolve();
+  }
+  function abrirModalComision(p){
+    comisionPrenda = p;
+    const pendiente = comisionPendiente(p);
+    document.getElementById('mc-prenda').textContent = (p.cat || 'Prenda') + (p.talla ? ' · Talla ' + p.talla : '');
+    document.getElementById('mc-codigo').textContent = codigoPago(p);
+    document.getElementById('mc-operacion').value = '';
+    document.getElementById('mc-error').classList.remove('show');
+    document.getElementById('mc-pedir').hidden = pendiente;
+    document.getElementById('mc-espera').hidden = !pendiente;
+    document.getElementById('mc-pagado').hidden = pendiente;
+    document.getElementById('mc-op-enviada').textContent = p.comisionOperacion || '';
+    document.getElementById('modal-comision').hidden = false;
+  }
+  function cerrarModalComision(){
+    document.getElementById('modal-comision').hidden = true;
+    comisionPrenda = null;
+  }
+  function avisarPagoRealizado(){
+    const p = comisionPrenda;
+    if(!p) return;
+    const op = document.getElementById('mc-operacion').value.trim();
+    const error = document.getElementById('mc-error');
+    if(op.length < 3){
+      error.textContent = 'Escribe el Nº de operación que te muestra Yape.';
+      error.classList.add('show');
+      return;
+    }
+    error.classList.remove('show');
+    const boton = document.getElementById('mc-pagado');
+    boton.disabled = true;
+    actualizarPrendaNube(p, { comisionEstado: 'pendiente', comisionOperacion: op, comisionSolicitadaAt: new Date().toISOString() })
+      .then(() => {
+        boton.disabled = false;
+        abrirModalComision(p);
+        refrescarTrasVenta(p);
+      })
+      .catch(err => {
+        console.error('No se pudo registrar el aviso de pago:', err);
+        boton.disabled = false;
+        error.textContent = 'No se pudo enviar el aviso. Revisa tu conexión e inténtalo de nuevo.';
+        error.classList.add('show');
+      });
+  }
+  // Admin: lista de pagos pendientes
+  function pagosPendientes(){ return prendas.filter(p => comisionPendiente(p) && !estaVendida(p)); }
+  function abrirModalPagos(){
+    if(!esAdmin()) return;
+    const lista = pagosPendientes().sort((a, b) => String(a.comisionSolicitadaAt || '').localeCompare(String(b.comisionSolicitadaAt || '')));
+    const box = document.getElementById('mp-lista');
+    box.innerHTML = lista.length ? lista.map(p => `
+      <div class="pago-item" data-id="${escaparHtml(p.id)}">
+        <strong>${escaparHtml(p.publicador)}</strong> · ${escaparHtml(p.cat)}${p.talla ? ' · ' + escaparHtml(p.talla) : ''}<br>
+        <small>Código: <b>${escaparHtml(codigoPago(p))}</b> · Operación: <b>${escaparHtml(p.comisionOperacion)}</b> · ${escaparHtml(fechaCorta(p.comisionSolicitadaAt))}</small>
+        <div class="pago-acciones">
+          <button type="button" class="btn verde" data-accion="confirmar">Confirmar pago</button>
+          <button type="button" class="btn outline" data-accion="rechazar">Rechazar</button>
+        </div>
+      </div>`).join('') : '<p class="screen-goal">No hay pagos pendientes de verificar.</p>';
+    box.querySelectorAll('.pago-item').forEach(item => {
+      const p = prendas.find(x => x.id === item.dataset.id);
+      item.querySelectorAll('button').forEach(b => b.addEventListener('click', () => {
+        if(!p || !esAdmin()) return;
+        const ok = b.dataset.accion === 'confirmar';
+        const campos = ok
+          ? { comisionEstado: 'pagada', comisionVerificadaAt: new Date().toISOString() }
+          : { comisionEstado: 'rechazada', comisionOperacion: '' };
+        b.disabled = true;
+        actualizarPrendaNube(p, campos).then(() => { abrirModalPagos(); renderCatalog(); actualizarMenuPagos(); })
+          .catch(err => { console.error(err); b.disabled = false; alert('No se pudo guardar el cambio.'); });
+      }));
+    });
+    document.getElementById('modal-pagos').hidden = false;
+  }
+  function actualizarMenuPagos(){
+    const btn = document.getElementById('menu-pagos');
+    if(!btn) return;
+    const n = esAdmin() ? pagosPendientes().length : 0;
+    btn.hidden = !esAdmin() || !COMISION_ACTIVA;
+    btn.textContent = '💳 Pagos por verificar' + (n ? ' (' + n + ')' : '');
+  }
+  function pintarEstrellasPicker(){
+    document.querySelectorAll('#sv-estrellas button').forEach(b => b.classList.toggle('on', Number(b.dataset.v) <= ventaEstrellas));
+  }
+  function sincronizarOtroComprador(){
+    const sel = document.getElementById('sv-comprador');
+    document.getElementById('sv-otro-wrap').hidden = ventaModo === 'calificar' || sel.value !== '__otro';
+  }
+  function abrirModalVenta(p, modo){
+    if(modo === 'vender'){
+      // Antes de vender: debe haber interesados y (salvo el admin) la comisión de S/ 1 verificada.
+      interesadosDe(p).then(lista => {
+        if(!esAdmin()){
+          if(!lista.length){
+            alert('Aún nadie marcó «Me interesa» en esta prenda. Solo quien lo marcó puede dejarte una reseña. Cuando alguien muestre interés podrás marcarla como vendida.');
+            return;
+          }
+          if(COMISION_ACTIVA && !comisionPagada(p)){ abrirModalComision(p); return; }
+        }
+        abrirModalVentaCon(p, modo, lista);
+      });
+      return;
+    }
+    abrirModalVentaCon(p, modo, []);
+  }
+  function abrirModalVentaCon(p, modo, lista){
+    ventaPrenda = p;
+    ventaModo = modo;
+    ventaEstrellas = 0;
+    const sel = document.getElementById('sv-comprador');
+    const previo = p.buyerName ? [{ id: p.buyerId || '', nombre: p.buyerName }] : [];
+    const opciones = (modo === 'resenar' && previo.length ? previo : lista);
+    // Solo el admin puede registrar a un comprador que no marcó «Me interesa».
+    sel.innerHTML = opciones.map((c, i) => `<option value="${i}">${escaparHtml(c.nombre)}</option>`).join('') + (esAdmin() ? '<option value="__otro">Otro vecino (escribir nombre)</option>' : '');
+    sel.value = opciones.length ? '0' : '__otro';
+    sel._opciones = opciones;
+    document.getElementById('sv-otro').value = '';
+    document.getElementById('sv-comentario').value = '';
+    document.getElementById('sv-error').classList.remove('show');
+    const titulos = { vender: 'Marcar como vendido', calificar: 'Calificar al vendedor', resenar: 'Registrar calificación' };
+    const ayudas = {
+      vender: 'Elige quién compró la prenda entre quienes marcaron «Me interesa». Esa persona podrá calificarte como vendedor desde su cuenta.',
+      calificar: 'Cuenta cómo fue tu experiencia con ' + (p.publicador || 'el vendedor') + '. Tu reseña aparecerá en su reputación.',
+      resenar: 'Comprador sin cuenta: registra su calificación sobre ' + (p.publicador || 'el vendedor') + '.'
+    };
+    document.getElementById('sv-titulo').textContent = titulos[modo];
+    document.getElementById('sv-ayuda').textContent = (p.cat || 'Prenda') + ' · ' + ayudas[modo];
+    document.getElementById('sv-comprador-wrap').hidden = modo === 'calificar';
+    document.getElementById('sv-resena').hidden = modo === 'vender';
+    document.getElementById('sv-publicar').textContent = modo === 'vender' ? 'Confirmar venta' : 'Publicar calificación';
+    pintarEstrellasPicker();
+    sincronizarOtroComprador();
+    document.getElementById('modal-venta').hidden = false;
+  }
+  function cerrarModalVenta(){
+    document.getElementById('modal-venta').hidden = true;
+    ventaPrenda = null;
+  }
+  function compradorElegido(){
+    const sel = document.getElementById('sv-comprador');
+    if(sel.value === '__otro'){
+      return { id: null, nombre: document.getElementById('sv-otro').value.trim() };
+    }
+    return (sel._opciones || [])[Number(sel.value)] || { id: null, nombre: '' };
+  }
+  function confirmarVenta(){
+    const p = ventaPrenda;
+    if(!p) return;
+    const error = document.getElementById('sv-error');
+    if(ventaModo === 'vender'){
+      if(!puedeMarcarVendido(p)) return;
+      const elegido = compradorElegido();
+      if(!esAdmin() && (!elegido.id || (COMISION_ACTIVA && !comisionPagada(p)))){
+        error.textContent = 'Elige a quien marcó «Me interesa»' + (COMISION_ACTIVA ? ' y verifica que la comisión esté pagada.' : '.');
+        error.classList.add('show');
+        return;
+      }
+      marcarVendida(p, elegido.nombre ? elegido : null);
+      cerrarModalVenta();
+      refrescarTrasVenta(p);
+      return;
+    }
+    let comprador;
+    if(ventaModo === 'calificar'){
+      if(!puedeCalificarComoComprador(p)) return;
+      const inicial = (currentUser.apellido || '').trim().slice(0, 1);
+      comprador = { id: miUserId, nombre: (currentUser.nombre + (inicial ? ' ' + inicial.toUpperCase() + '.' : '')).trim() };
+    }else{
+      if(!puedeCalificar(p)) return;
+      comprador = compradorElegido();
+      if(!comprador.nombre){ error.textContent = 'Indica quién compró la prenda.'; error.classList.add('show'); return; }
+    }
+    const comentario = document.getElementById('sv-comentario').value.trim();
+    if(!ventaEstrellas){ error.textContent = 'Elige de 1 a 5 estrellas.'; error.classList.add('show'); return; }
+    if(!comentario){ error.textContent = 'Cuenta cómo fue el proceso en un comentario.'; error.classList.add('show'); return; }
+    {
+      guardarResena({
+        id: 'r_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 7),
+        sellerId: p.userId || null,
+        sellerName: p.publicador || 'Vendedor',
+        prendaId: p.id,
+        prendaCat: p.cat || 'Prenda',
+        buyerId: comprador.id || null,
+        buyerName: comprador.nombre,
+        stars: ventaEstrellas,
+        comment: comentario,
+        fecha: new Date().toISOString(),
+        createdBy: miUserId
+      });
+    }
+    cerrarModalVenta();
+    refrescarTrasVenta(p);
+  }
+
+  // Perfil / reputación del vendedor
+  function abrirReputacion(sellerId, nombre, zona){
+    const lista = resenas.filter(r => r.sellerId && r.sellerId === sellerId)
+      .sort((a, b) => Date.parse(b.fecha) - Date.parse(a.fecha));
+    const ventas = prendas.filter(p => p.userId === sellerId && estaVendida(p)).length;
+    document.getElementById('rep-nombre').textContent = nombre || 'Vecino';
+    document.getElementById('rep-avatar').textContent = (nombre || 'V').trim().slice(0, 1).toUpperCase();
+    const zonaEl = document.getElementById('rep-zona');
+    zonaEl.hidden = !zona;
+    zonaEl.textContent = zona ? 'San Miguel · ' + zona : '';
+    const score = document.getElementById('rep-score');
+    if(lista.length){
+      const prom = lista.reduce((s, r) => s + r.stars, 0) / lista.length;
+      score.innerHTML = `<strong>${prom.toFixed(1)}</strong> ${estrellasHtml(prom)} <span style="color:var(--ink-soft)">(${lista.length} ${lista.length === 1 ? 'reseña' : 'reseñas'} · ${ventas} ${ventas === 1 ? 'venta' : 'ventas'})</span>`;
+    }else{
+      score.innerHTML = `<span style="color:var(--ink-soft)">Aún sin reseñas${ventas ? ' · ' + ventas + (ventas === 1 ? ' venta' : ' ventas') : ''}.</span>`;
+    }
+    document.getElementById('rep-lista').innerHTML = lista.map(r => {
+      const prenda = prendas.find(p => p.id === r.prendaId);
+      const thumb = prenda && prenda.foto ? `<img src="${prenda.foto}" alt="${escaparHtml(r.prendaCat)}">` : '';
+      return `<div class="resena">
+        <div class="resena-thumb">${thumb}</div>
+        <div><strong>${escaparHtml(r.buyerName)}</strong> ${estrellasHtml(r.stars)}
+          <p>${escaparHtml(r.comment)}</p>
+          <small>${escaparHtml(r.prendaCat)} · ${escaparHtml(fechaCorta(r.fecha))}</small></div>
+      </div>`;
+    }).join('');
+    document.getElementById('modal-vendedor').hidden = false;
+  }
+
+  (function iniciarUiVenta(){
+    const picker = document.getElementById('sv-estrellas');
+    for(let i = 1; i <= 5; i++){
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.dataset.v = i;
+      b.textContent = '★';
+      b.setAttribute('aria-label', i + (i === 1 ? ' estrella' : ' estrellas'));
+      b.addEventListener('click', () => { ventaEstrellas = i; pintarEstrellasPicker(); });
+      picker.appendChild(b);
+    }
+    document.getElementById('sv-comprador').addEventListener('change', sincronizarOtroComprador);
+    document.getElementById('sv-publicar').addEventListener('click', confirmarVenta);
+    document.getElementById('sv-cancelar').addEventListener('click', cerrarModalVenta);
+    document.getElementById('modal-venta').addEventListener('click', (e) => { if(e.target.id === 'modal-venta') cerrarModalVenta(); });
+    document.getElementById('rep-cerrar').addEventListener('click', () => { document.getElementById('modal-vendedor').hidden = true; });
+    document.getElementById('modal-vendedor').addEventListener('click', (e) => { if(e.target.id === 'modal-vendedor') e.target.hidden = true; });
+    document.getElementById('menu-reputacion').addEventListener('click', () => {
+      document.getElementById('user-drop').hidden = true;
+      if(sesionActiva()) abrirReputacion(currentUser.userId, currentUser.nombre + ' ' + currentUser.apellido, currentUser.zona);
+    });
+    document.addEventListener('keydown', (e) => {
+      if(e.key !== 'Escape') return;
+      if(!document.getElementById('modal-venta').hidden) cerrarModalVenta();
+      document.getElementById('modal-vendedor').hidden = true;
+    });
+  })();
+
+  function eliminarPrenda(p){
+    if(!puedeEliminar(p)) return;
+    if(!confirm('¿Eliminar esta publicación?')) return;
+
+    const quitarDeLista = () => {
+      const idx = prendas.findIndex(x => x === p || (p.id && x.id === p.id));
+      if(idx >= 0) prendas.splice(idx, 1);
+      guardarPrendasLocal();
+      updateFilterOptions();
+      renderCatalog();
+      if(prendaActual && (prendaActual === p || (p.id && prendaActual.id === p.id))){
+        prendaActual = null;
+        document.getElementById('interes-content').innerHTML = '';
+      }
+    };
+
+    const idNube = p.id && String(p.id).indexOf('local_') !== 0;
+    if(firebaseListo && db && idNube){
+      db.collection('prendas').doc(p.id).delete().then(() => {
+        quitarDeLista();
+      }).catch(err => {
+        console.error('Error eliminando en Firestore:', err);
+        alert('No se pudo eliminar la prenda. Revisa tu conexión o los permisos de Firestore.');
+      });
+    } else {
+      quitarDeLista();
+    }
+  }
+
+  function renderCatalog(){
+    const fCat = document.getElementById('f-cat').value;
+    const fTalla = document.getElementById('f-talla').value;
+    const fMod = document.getElementById('f-mod').value;
+    const grid = document.getElementById('catalog-grid');
+    grid.innerHTML = '';
+    if(!sesionActiva()){ soloMias = false; soloPendientes = false; }
+    const pendientes = prendas.filter(puedeCalificarComoComprador).length;
+    const btnPend = document.getElementById('menu-pendientes');
+    btnPend.hidden = pendientes === 0;
+    btnPend.textContent = '★ Calificar mis compras (' + pendientes + ')';
+    if(soloPendientes && !pendientes) soloPendientes = false;
+    document.getElementById('aviso-mias').hidden = !(soloMias || soloPendientes);
+    document.getElementById('aviso-texto').textContent = soloPendientes ? 'Compras pendientes de calificar' : 'Mostrando solo tus publicaciones';
+    const listaFiltrada = prendas.filter(p => (!fCat || p.cat===fCat) && (!fTalla || p.talla===fTalla) && (!fMod || p.modo===fMod)
+      && (!soloMias || esPrendaPropia(p)) && (!soloPendientes || puedeCalificarComoComprador(p)));
+
+    if(!catalogoListo){
+      grid.innerHTML = '<div class="skeleton-card" aria-busy="true"><div class="sk sk-img">Cargando prendas…</div><div class="sk sk-line"></div><div class="sk sk-line short"></div><div class="sk sk-btn"></div></div>'
+        .replace(/^(.*)$/, (m) => m.repeat(8));
+      grid.setAttribute('aria-busy', 'true');
+      return;
+    }
+    grid.removeAttribute('aria-busy');
+
+    if(listaFiltrada.length === 0){
+      grid.innerHTML = soloMias
+        ? `<div class="empty-catalog">Aún no has publicado prendas. Usa «Publicar prenda» para empezar.</div>`
+        : `<div class="empty-catalog">Aún no hay prendas en San Miguel. ¡Sé el primero en publicar!</div>`;
+      return;
+    }
+
+    listaFiltrada.forEach(p => {
+        const card = document.createElement('div');
+        card.className = 'prenda-card';
+        const imgSrc = p.mini || p.foto;
+        const thumbContenido = imgSrc ? `<img src="${imgSrc}" alt="Foto de ${escaparHtml(p.cat)}" decoding="async" onload="this.classList.add('ok')" onerror="this.classList.add('ok')">` : '';
+        const vendida = estaVendida(p);
+        card.innerHTML = `
+          <div class="prenda-thumb${imgSrc ? '' : ' sk'}" style="${imgSrc ? 'background:#f2f4f5' : ''}">
+            ${thumbContenido}
+            <div class="heart">♥</div>
+            ${vendida ? '<div class="vendido-overlay"><span class="vendido-tag">VENDIDO</span></div>' : ''}
+          </div>
+          <div class="prenda-body">
+            <div class="prenda-cat">${escaparHtml(p.cat)}</div>
+            <div class="prenda-meta"><span class="loc-badge">San Miguel${p.zona ? ' · ' + escaparHtml(p.zona) : ''}</span></div>
+            <div class="prenda-meta">Talla ${escaparHtml(p.talla)}</div>
+            <div class="price-row">
+              <span class="price">${p.modo==='venta' ? 'S/ '+p.precio : modoLabel[p.modo]}</span>
+              <span class="badge">${p.estado}</span>
+            </div>
+            ${vendida ? '<button type="button" class="interesa-btn vendida" disabled>Vendida</button>' : '<button class="interesa-btn">Me interesa</button>'}
+            ${puedeMarcarVendido(p) ? '<button type="button" class="vender-btn">Marcar como vendido</button>' : ''}
+            ${puedeCalificarComoComprador(p) ? '<button type="button" class="vender-btn calificar-btn" data-modo="calificar">★ Calificar al vendedor</button>' : ''}
+            ${puedeCalificar(p) ? '<button type="button" class="vender-btn calificar-btn" data-modo="resenar">Registrar calificación</button>' : ''}
+            ${puedeEliminar(p) ? '<button type="button" class="eliminar-btn">Eliminar</button>' : ''}
+          </div>`;
+        const thumb = card.querySelector('.prenda-thumb');
+        if(thumb){
+          thumb.style.cursor = 'zoom-in';
+          thumb.addEventListener('click', () => {
+            renderInteres(p);
+            showScreen('interes');
+          });
+        }
+        if(!vendida){
+          card.querySelector('.interesa-btn').addEventListener('click', (e)=>{
+            solicitarInteres(p, e.currentTarget);
+          });
+        }
+        const btnVender = card.querySelector('.vender-btn:not(.calificar-btn)');
+        if(btnVender) btnVender.addEventListener('click', (e) => { e.stopPropagation(); abrirModalVenta(p, 'vender'); });
+        const btnCalificar = card.querySelector('.calificar-btn');
+        if(btnCalificar) btnCalificar.addEventListener('click', (e) => { e.stopPropagation(); abrirModalVenta(p, btnCalificar.dataset.modo); });
+        const btnEliminar = card.querySelector('.eliminar-btn');
+        if(btnEliminar){
+          btnEliminar.addEventListener('click', (e)=>{
+            e.stopPropagation();
+            eliminarPrenda(p);
+          });
+        }
+        grid.appendChild(card);
+      });
+  }
+
+  function registrarInteres(p, modalidadEntrega){
+    // Registra la interacción en tiempo real para métricas de conversión
+    if(firebaseListo && db){
+      db.collection('intereses').add({
+        prendaId: p.id || null,
+        cat: p.cat,
+        vendedorNombre: p.publicador,
+        vendedorZona: p.zona,
+        compradorId: obtenerCompradorId(),
+        compradorNombre: miPerfil ? miPerfil.nombre : null,
+        compradorTelefono: miPerfil ? miPerfil.telefono : null,
+        modalidadEntrega: modalidadEntrega || null,
+        fecha: firebase.firestore.FieldValue.serverTimestamp()
+      }).catch(err => console.error('Error registrando interés en Firestore:', err));
+      // Registro público mínimo (sin teléfono): permite al vendedor elegir al comprador al vender.
+      const compradorId = obtenerCompradorId();
+      if(p.id && String(p.id).indexOf('local_') !== 0 && compradorId && compradorId !== p.userId){
+        const inicial = miPerfil && miPerfil.apellido ? ' ' + miPerfil.apellido.trim().slice(0, 1).toUpperCase() + '.' : '';
+        db.collection('interesados').doc(p.id + '_' + compradorId).set({
+          prendaId: p.id,
+          compradorId,
+          compradorNombre: ((miPerfil && miPerfil.nombre) || 'Comprador').trim() + inicial,
+          fecha: firebase.firestore.FieldValue.serverTimestamp()
+        }, { merge: true }).catch(err => console.error('Error registrando interesado:', err));
+      }
+    }
+  }
+
+  function descripcionPrenda(p){
+    const partes = [p.cat || 'prenda'];
+    if(p.talla) partes.push('talla ' + p.talla);
+    if(p.modo === 'venta' && p.precio) partes.push('S/ ' + p.precio);
+    else if(modoLabel[p.modo]) partes.push(modoLabel[p.modo].toLowerCase());
+    return partes.join(' · ');
+  }
+  function mensajeWhatsApp(p, preferencia){
+    const datos = leerDatosUsuario();
+    const pref = preferencia || datos.preferencia;
+    const vendedor = (p.publicador || '').trim().split(' ')[0];
+    const saludo = vendedor ? `Hola ${vendedor}` : 'Hola';
+    const intro = `${saludo}, vi tu prenda "${descripcionPrenda(p)}" en Ropero Vecinal y me interesa. Soy ${datos.nombre}.`;
+    if(pref === 'Envío motorizado'){
+      return `${intro} Me gustaría que la prenda llegue por motorizado. ¿Coordinamos entre ambos cómo y cuándo se envía, y quién cubre el costo? (Ropero Vecinal solo nos conecta; no gestiona ni paga el envío.)`;
+    }
+    return `${intro} ¿Coordinamos la entrega en un punto público seguro de San Miguel, por ejemplo el Parque de la Amistad o la Plaza San Miguel? ¿Qué día y a qué hora te acomoda?`;
+  }
+  function urlWhatsApp(p, preferencia){
+    const tel = String(p.whatsapp || ('51' + (p.telefono || ''))).replace(/\D/g, '');
+    return 'https://wa.me/' + tel + '?text=' + encodeURIComponent(mensajeWhatsApp(p, preferencia));
+  }
+  function abrirWhatsApp(p, preferencia){
+    const url = urlWhatsApp(p, preferencia);
+    window.open(url, '_blank', 'noopener,noreferrer');
+    return url;
+  }
+
+  let modalModo = 'editar';
+  let prendaPendiente = null;
+  let btnInteresPendiente = null;
+
+  function marcarEntregaGuardada(){
+    const pref = leerDatosUsuario().preferencia;
+    const mapa = { 'Punto público seguro': 'publico', 'Envío motorizado': 'envio' };
+    document.querySelectorAll('.entrega-card').forEach(c => {
+      c.classList.toggle('selected', c.dataset.entrega === mapa[pref]);
+    });
+  }
+
+  function completarInteres(p, btn){
+    clicsInteres++;
+    conteoModalidad[p.modo] = (conteoModalidad[p.modo] || 0) + 1;
+    document.getElementById('nav-interes').textContent = clicsInteres;
+    if(btn){
+      btn.textContent = '✓ Enviado';
+      btn.classList.add('done');
+    }
+    registrarInteres(p, leerDatosUsuario().preferencia);
+    renderInteres(p);
+    if(CHAT_ACTIVO) iniciarConversacion(p);
+    else showScreen('entrega');
+  }
+
+  const CHAT_LOCAL_KEY = 'ropero_chat_v1';
+  let conversaciones = [];
+  let mensajesActivos = [];
+  let conversacionActivaId = null;
+  let unsubscribeMensajes = null;
+  const chatsPorId = new Map();
+  let unsubsConversaciones = [];
+
+  function escaparHtml(valor){
+    return String(valor || '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  }
+  function idConversacion(productId, buyerId){
+    return 'c_' + String(productId) + '_' + String(buyerId).replace(/[^a-zA-Z0-9_-]/g, '');
+  }
+  function tiempoChat(valor, fallbackMs){
+    const ms = millisDeFecha(valor) || fallbackMs || 0;
+    if(!ms) return '';
+    return new Date(ms).toLocaleString('es-PE', { day:'2-digit', month:'short', hour:'2-digit', minute:'2-digit' });
+  }
+  function noLeidosDe(conv){
+    if(!conv) return 0;
+    return conv.seller_id === miUserId ? (conv.unread_seller_count || 0) : (conv.unread_buyer_count || 0);
+  }
+  function guardarChatLocal(){
+    try{ localStorage.setItem(CHAT_LOCAL_KEY, JSON.stringify({ conversaciones, mensajes: window.__mensajesLocal || [] })); }catch(err){}
+  }
+  function cargarChatLocal(){
+    try{
+      const raw = JSON.parse(localStorage.getItem(CHAT_LOCAL_KEY) || '{}');
+      conversaciones = (raw.conversaciones || []).filter(c => c.buyer_id === miUserId || c.seller_id === miUserId);
+      window.__mensajesLocal = raw.mensajes || [];
+    }catch(err){
+      conversaciones = [];
+      window.__mensajesLocal = [];
+    }
+  }
+  function actualizarBadgeChat(){
+    const total = conversaciones.reduce((sum, c) => sum + noLeidosDe(c), 0);
+    const badge = document.getElementById('nav-chat-count');
+    if(!badge) return;
+    badge.hidden = total <= 0;
+    badge.textContent = total > 9 ? '9+' : String(total);
+  }
+  function renderListaChats(){
+    const lista = document.getElementById('chat-list');
+    if(!lista) return;
+    const orden = conversaciones.slice().sort((a, b) => (millisDeFecha(b.last_message_time) || b.last_ms || 0) - (millisDeFecha(a.last_message_time) || a.last_ms || 0));
+    if(!orden.length){
+      lista.innerHTML = '<p class="chat-empty">Aún no tienes conversaciones.</p>';
+      return;
+    }
+    lista.innerHTML = orden.map(c => {
+      const otro = c.seller_id === miUserId ? (c.buyer_name || 'Comprador') : (c.seller_name || 'Vendedor');
+      const unread = noLeidosDe(c);
+      return `<button type="button" class="chat-item${c.id === conversacionActivaId ? ' active' : ''}" data-chat="${escaparHtml(c.id)}">
+        <span class="chat-avatar">${escaparHtml(otro.slice(0,1).toUpperCase())}</span>
+        <span><strong>${escaparHtml(otro)}</strong><small>${escaparHtml(c.product_title || 'Prenda')} · ${escaparHtml(c.last_message || '')}</small></span>
+        <span>${unread ? `<span class="chat-unread">${unread}</span>` : ''}<small>${escaparHtml(tiempoChat(c.last_message_time, c.last_ms))}</small></span>
+      </button>`;
+    }).join('');
+    lista.querySelectorAll('.chat-item').forEach(btn => {
+      btn.addEventListener('click', () => abrirConversacion(btn.dataset.chat));
+    });
+  }
+  function renderMensajes(){
+    const log = document.getElementById('chat-log');
+    const conv = conversaciones.find(c => c.id === conversacionActivaId);
+    const activo = document.getElementById('chat-active');
+    const vacio = document.getElementById('chat-empty');
+    if(!conv){
+      if(activo) activo.hidden = true;
+      if(vacio) vacio.hidden = false;
+      return;
+    }
+    if(vacio) vacio.hidden = true;
+    if(activo) activo.hidden = false;
+    const otro = conv.seller_id === miUserId ? (conv.buyer_name || 'Comprador') : (conv.seller_name || 'Vendedor');
+    document.getElementById('chat-titulo').textContent = otro;
+    document.getElementById('chat-sub').textContent = conv.product_title || 'Prenda';
+    log.innerHTML = mensajesActivos.map(m => {
+      const mia = m.sender_id === miUserId;
+      return `<div class="burbuja${mia ? ' mia' : ''}">${escaparHtml(m.content)}<time>${escaparHtml(tiempoChat(m.created_at, m.created_at_ms))}</time></div>`;
+    }).join('');
+    log.scrollTop = log.scrollHeight;
+  }
+  function entrarAMensajes(){
+    renderListaChats();
+    renderMensajes();
+    const shell = document.getElementById('chat-shell');
+    if(shell) shell.classList.toggle('en-hilo', !!conversacionActivaId);
+    if(conversacionActivaId){
+      escucharMensajes(conversacionActivaId);
+      marcarLeidos(conversacionActivaId);
+    }
+  }
+  function abrirConversacion(id){
+    conversacionActivaId = id;
+    const shell = document.getElementById('chat-shell');
+    if(shell) shell.classList.add('en-hilo');
+    if(document.querySelector('.screen.active') && document.querySelector('.screen.active').id !== 'screen-mensajes'){
+      showScreen('mensajes');
+      return;
+    }
+    renderListaChats();
+    escucharMensajes(id);
+    marcarLeidos(id);
+    renderMensajes();
+  }
+  function escucharMensajes(convId){
+    if(unsubscribeMensajes){ unsubscribeMensajes(); unsubscribeMensajes = null; }
+    if(!(firebaseListo && db)){
+      mensajesActivos = (window.__mensajesLocal || []).filter(m => m.conversation_id === convId);
+      mensajesActivos.sort((a, b) => (a.created_at_ms || 0) - (b.created_at_ms || 0));
+      renderMensajes();
+      return;
+    }
+    unsubscribeMensajes = db.collection('mensajes').where('conversation_id', '==', convId).onSnapshot(snap => {
+      mensajesActivos = [];
+      snap.forEach(doc => mensajesActivos.push(Object.assign({ id: doc.id }, doc.data())));
+      mensajesActivos.sort((a, b) => (a.created_at_ms || millisDeFecha(a.created_at)) - (b.created_at_ms || millisDeFecha(b.created_at)));
+      renderMensajes();
+      if(conversacionActivaId === convId && document.getElementById('screen-mensajes').classList.contains('active')){
+        marcarLeidos(convId);
+      }
+    }, err => console.error('No se pudieron leer los mensajes', err));
+  }
+  async function marcarLeidos(convId){
+    const conv = conversaciones.find(c => c.id === convId);
+    if(!conv) return;
+    const soyVendedor = conv.seller_id === miUserId;
+    const campo = soyVendedor ? 'unread_seller_count' : 'unread_buyer_count';
+    const pendientes = mensajesActivos.filter(m => m.receiver_id === miUserId && !m.is_read);
+    if(!pendientes.length && !(conv[campo] > 0)) return;
+    if(!(firebaseListo && db)){
+      pendientes.forEach(m => { m.is_read = true; });
+      conv[campo] = 0;
+      guardarChatLocal();
+      actualizarBadgeChat();
+      renderListaChats();
+      return;
+    }
+    try{
+      const batch = db.batch();
+      pendientes.forEach(m => batch.update(db.collection('mensajes').doc(m.id), { is_read: true }));
+      batch.update(db.collection('conversaciones').doc(convId), { [campo]: 0 });
+      await batch.commit();
+    }catch(err){ console.error('No se pudieron marcar los mensajes como leídos', err); }
+  }
+  function fusionarConversaciones(){
+    conversaciones = Array.from(chatsPorId.values());
+    actualizarBadgeChat();
+    renderListaChats();
+    if(conversacionActivaId && document.getElementById('screen-mensajes').classList.contains('active')) renderMensajes();
+  }
+  function escucharConversaciones(){
+    if(!CHAT_ACTIVO) return;
+    if(!(firebaseListo && db)){
+      cargarChatLocal();
+      actualizarBadgeChat();
+      renderListaChats();
+      return;
+    }
+    const tomar = (snap) => {
+      snap.docChanges().forEach(change => {
+        if(change.type === 'removed') chatsPorId.delete(change.doc.id);
+        else chatsPorId.set(change.doc.id, Object.assign({ id: change.doc.id }, change.doc.data()));
+      });
+      fusionarConversaciones();
+    };
+    unsubsConversaciones.push(db.collection('conversaciones').where('buyer_id', '==', miUserId).onSnapshot(tomar, err => console.error(err)));
+    unsubsConversaciones.push(db.collection('conversaciones').where('seller_id', '==', miUserId).onSnapshot(tomar, err => console.error(err)));
+  }
+  // Al cambiar de sesión (login/logout) el chat debe reenlazarse al nuevo userId.
+  function reiniciarChat(){
+    unsubsConversaciones.forEach(fn => fn());
+    unsubsConversaciones = [];
+    if(unsubscribeMensajes){ unsubscribeMensajes(); unsubscribeMensajes = null; }
+    chatsPorId.clear();
+    conversaciones = [];
+    mensajesActivos = [];
+    conversacionActivaId = null;
+    const shell = document.getElementById('chat-shell');
+    if(shell) shell.classList.remove('en-hilo');
+    document.getElementById('chat-active').hidden = true;
+    document.getElementById('chat-empty').hidden = false;
+    escucharConversaciones();
+  }
+
+  // Al registrarse: las prendas publicadas antes con ese celular pasan a la cuenta nueva
+  // (junto con los chats donde esa persona era la vendedora). Devuelve cuántas prendas se vincularon.
+  async function vincularPrendasPorTelefono(cuenta){
+    const tel = telefonoSoloDigitos(cuenta.telefono);
+    if(!tel) return 0;
+    const coincide = (p) => {
+      const t = telefonoSoloDigitos(p.telefono || p.whatsapp);
+      return (t === tel || t === '51' + tel) && p.userId !== cuenta.userId;
+    };
+    const candidatas = new Map();
+    prendas.filter(coincide).forEach(p => candidatas.set(p.id, p));
+    if(firebaseListo && db){
+      try{
+        const snap = await db.collection('prendas').where('telefono', '==', tel).get();
+        snap.forEach(doc => { const p = mapPrendaFirestore(doc); if(coincide(p)) candidatas.set(p.id, p); });
+      }catch(err){ console.warn('No se pudieron buscar prendas por celular', err); }
+    }
+    if(!candidatas.size) return 0;
+
+    const viejos = new Set();
+    candidatas.forEach(p => {
+      if(p.userId) viejos.add(p.userId);
+      viejos.add('vendedor_' + p.id);
+    });
+
+    if(firebaseListo && db){
+      try{
+        const nube = Array.from(candidatas.values()).filter(p => p.id && String(p.id).indexOf('local_') !== 0);
+        for(let i = 0; i < nube.length; i += 400){
+          const lote = db.batch();
+          nube.slice(i, i + 400).forEach(p => lote.update(db.collection('prendas').doc(p.id), { userId: cuenta.userId }));
+          await lote.commit();
+        }
+        for(const viejo of viejos){
+          const convs = await db.collection('conversaciones').where('seller_id', '==', viejo).get();
+          const lote = db.batch();
+          convs.forEach(d => lote.update(d.ref, { seller_id: cuenta.userId }));
+          const msgs = [];
+          for(const campo of ['sender_id', 'receiver_id']){
+            const s = await db.collection('mensajes').where(campo, '==', viejo).get();
+            s.forEach(d => lote.update(d.ref, { [campo]: cuenta.userId }));
+            msgs.push(s.size);
+          }
+          if(convs.size || msgs.some(n => n)) await lote.commit();
+        }
+      }catch(err){
+        console.error('No se pudieron vincular las prendas en Firestore:', err);
+        alert('Encontramos tus prendas anteriores, pero no se pudieron pasar a tu cuenta (revisa los permisos de Firestore).');
+        return 0;
+      }
+    }
+
+    prendas.forEach(p => { if(candidatas.has(p.id)) p.userId = cuenta.userId; });
+    guardarPrendasLocal();
+    try{
+      const raw = JSON.parse(localStorage.getItem(CHAT_LOCAL_KEY) || '{}');
+      (raw.conversaciones || []).forEach(c => { if(viejos.has(c.seller_id)) c.seller_id = cuenta.userId; });
+      (raw.mensajes || []).forEach(m => {
+        if(viejos.has(m.sender_id)) m.sender_id = cuenta.userId;
+        if(viejos.has(m.receiver_id)) m.receiver_id = cuenta.userId;
+      });
+      localStorage.setItem(CHAT_LOCAL_KEY, JSON.stringify(raw));
+    }catch(err){ /* sin chat local */ }
+    return candidatas.size;
+  }
+  async function iniciarConversacion(p){
+    if(p.userId && p.userId === miUserId){
+      alert('Esta prenda es tuya. El chat se abre cuando otra persona marca Me interesa.');
+      return;
+    }
+    const buyerId = miUserId;
+    const sellerId = p.userId || ('vendedor_' + p.id);
+    const convId = idConversacion(p.id, buyerId);
+    const datos = leerDatosUsuario();
+    const texto = '¡Hola! Estoy interesado/a en tu prenda ' + (p.cat || 'prenda') + '.';
+    const base = {
+      id: convId,
+      product_id: p.id,
+      product_title: p.cat || 'Prenda',
+      buyer_id: buyerId,
+      buyer_name: datos.nombre || 'Comprador',
+      seller_id: sellerId,
+      seller_name: p.publicador || 'Vendedor',
+      last_message: texto,
+      unread_seller_count: 1,
+      unread_buyer_count: 0
+    };
+    try{
+      if(firebaseListo && db){
+        const ref = db.collection('conversaciones').doc(convId);
+        const existente = await ref.get();
+        if(!existente.exists){
+          const ahora = firebase.firestore.FieldValue.serverTimestamp();
+          await ref.set(Object.assign({}, base, { last_message_time: ahora }));
+          await db.collection('mensajes').add({
+            conversation_id: convId,
+            sender_id: buyerId,
+            receiver_id: sellerId,
+            content: texto,
+            created_at: ahora,
+            created_at_ms: Date.now(),
+            is_read: false
+          });
+        }
+      }else{
+        cargarChatLocal();
+        if(!conversaciones.some(c => c.id === convId)){
+          base.last_ms = Date.now();
+          conversaciones.push(base);
+          window.__mensajesLocal.push({
+            id: 'm_' + Date.now(),
+            conversation_id: convId,
+            sender_id: buyerId,
+            receiver_id: sellerId,
+            content: texto,
+            created_at_ms: Date.now(),
+            is_read: false
+          });
+          guardarChatLocal();
+        }
+      }
+      abrirConversacion(convId);
+    }catch(err){
+      console.error(err);
+      alert('No se pudo abrir el chat. Revisa tu conexión e inténtalo de nuevo.');
+    }
+  }
+  async function enviarMensajeChat(texto){
+    const conv = conversaciones.find(c => c.id === conversacionActivaId);
+    if(!conv || !texto) return;
+    const soyVendedor = conv.seller_id === miUserId;
+    const receiver = soyVendedor ? conv.buyer_id : conv.seller_id;
+    if(firebaseListo && db){
+      const ahora = firebase.firestore.FieldValue.serverTimestamp();
+      await db.collection('mensajes').add({
+        conversation_id: conv.id,
+        sender_id: miUserId,
+        receiver_id: receiver,
+        content: texto,
+        created_at: ahora,
+        created_at_ms: Date.now(),
+        is_read: false
+      });
+      const inc = soyVendedor
+        ? { unread_buyer_count: firebase.firestore.FieldValue.increment(1) }
+        : { unread_seller_count: firebase.firestore.FieldValue.increment(1) };
+      await db.collection('conversaciones').doc(conv.id).update(Object.assign({
+        last_message: texto,
+        last_message_time: ahora
+      }, inc));
+    }else{
+      window.__mensajesLocal.push({
+        id: 'm_' + Date.now(),
+        conversation_id: conv.id,
+        sender_id: miUserId,
+        receiver_id: receiver,
+        content: texto,
+        created_at_ms: Date.now(),
+        is_read: false
+      });
+      conv.last_message = texto;
+      conv.last_ms = Date.now();
+      if(soyVendedor) conv.unread_buyer_count = (conv.unread_buyer_count || 0) + 1;
+      else conv.unread_seller_count = (conv.unread_seller_count || 0) + 1;
+      guardarChatLocal();
+      escucharMensajes(conv.id);
+      renderListaChats();
+    }
+  }
+
+  function solicitarInteres(p, btn){
+    if(estaVendida(p)) return;
+    if(esPrendaPropia(p)){
+      alert('Esta prenda es tuya. Cuando otra persona marque «Me interesa» podrá escribirte por WhatsApp.');
+      return;
+    }
+    if(!sesionActiva()){
+      pedirSesion(() => solicitarInteres(p, btn));
+      return;
+    }
+    if(datosInteresListos()){
+      completarInteres(p, btn);
+      return;
+    }
+    prendaPendiente = p;
+    btnInteresPendiente = btn;
+    abrirModalDatos('interes');
+  }
+
+  function abrirModalDatos(modo){
+    modalModo = modo || 'editar';
+    const datos = leerDatosUsuario();
+    document.getElementById('modal-nombre').value = datos.nombre;
+    document.getElementById('modal-telefono').value = datos.telefono;
+    document.querySelectorAll('#modal-entrega-group .pill').forEach(pill => {
+      pill.classList.toggle('selected', pill.dataset.entrega === datos.preferencia);
+    });
+    document.getElementById('modal-datos-error').classList.remove('show');
+    const titulo = document.getElementById('modal-datos-titulo');
+    const ayuda = document.getElementById('modal-datos-ayuda');
+    const guardar = document.getElementById('modal-datos-guardar');
+    if(modalModo === 'interes'){
+      titulo.textContent = 'Completa tus datos';
+      ayuda.textContent = 'Necesitamos tu nombre, WhatsApp y cómo prefieres la entrega para contactar al vecino.';
+      guardar.textContent = 'Continuar';
+    }else{
+      titulo.textContent = 'Mis datos';
+      ayuda.textContent = 'Puedes actualizar tu nombre, WhatsApp y preferencia de entrega. Se guardan en este navegador.';
+      guardar.textContent = 'Guardar';
+    }
+    const overlay = document.getElementById('modal-datos');
+    overlay.hidden = false;
+    document.getElementById('modal-nombre').focus();
+  }
+
+  function cerrarModalDatos(){
+    document.getElementById('modal-datos').hidden = true;
+    prendaPendiente = null;
+    btnInteresPendiente = null;
+    modalModo = 'editar';
+  }
+
+  function guardarModalDatos(){
+    const nombre = document.getElementById('modal-nombre').value.trim();
+    const telefono = telefonoSoloDigitos(document.getElementById('modal-telefono').value);
+    const sel = document.querySelector('#modal-entrega-group .pill.selected');
+    const preferencia = sel ? sel.dataset.entrega : '';
+    const errorMsg = document.getElementById('modal-datos-error');
+    if(!nombre || !telefonoEsValido(telefono) || !preferenciaValida(preferencia)){
+      errorMsg.classList.add('show');
+      return;
+    }
+    errorMsg.classList.remove('show');
+    persistirDatosUsuario({ nombre, telefono, preferencia });
+    autocompletarRegistro();
+    const modo = modalModo;
+    const prenda = prendaPendiente;
+    const btn = btnInteresPendiente;
+    cerrarModalDatos();
+    if(modo === 'interes' && prenda) completarInteres(prenda, btn);
+  }
+
+  function fotosDePrenda(p){
+    const lista = [];
+    const pack = p.fotos || {};
+    if(pack.frente) lista.push({ titulo: 'Vista frontal', src: pack.frente });
+    if(pack.atras) lista.push({ titulo: 'Vista posterior', src: pack.atras });
+    if(pack.defecto) lista.push({ titulo: 'Defecto', src: pack.defecto });
+    if(!lista.length && p.foto) lista.push({ titulo: 'Foto', src: p.foto });
+    if(!lista.length && p.mini) lista.push({ titulo: 'Foto', src: p.mini });
+    return lista;
+  }
+
+  function renderInteres(p){
+    const box = document.getElementById('interes-content');
+    const fotos = fotosDePrenda(p);
+    const nota = p.tieneDefecto && p.detalleDefecto
+      ? `<div class="nota-defecto"><strong>Nota de estado / Defectos declarados por el vendedor</strong><p>${escaparHtml(p.detalleDefecto)}</p></div>`
+      : '';
+    box.innerHTML = `
+      <div class="detalle-wrap">
+        <div>
+          <div class="detalle-thumb" id="detalle-principal" style="background:#F9FAFB"></div>
+          <div class="galeria" id="detalle-galeria"></div>
+        </div>
+        <div class="detalle-body">
+          <h4>${escaparHtml(p.cat)}</h4>
+          <div class="detalle-tags">
+            <span class="badge">${p.modo==='venta' ? 'S/ '+p.precio : modoLabel[p.modo]}</span>
+            <span class="badge">Talla ${escaparHtml(p.talla)}</span>
+            <span class="badge">${escaparHtml(p.estado)}</span>
+            <span class="loc-badge">San Miguel${p.zona ? ' · ' + escaparHtml(p.zona) : ''}</span>
+          </div>
+          ${nota}
+          <p class="desc">${escaparHtml(p.desc || 'Sin descripción adicional.')}</p>
+          <div class="publicador-row"><div class="mini-avatar"></div><button type="button" class="link-vendedor" id="btn-ver-vendedor">${escaparHtml(p.publicador)}</button> · ${escaparHtml(p.zona)}</div>
+          ${estaVendida(p)
+            ? '<div class="banner-vendida"><b>VENDIDO</b><span>Esta prenda ya fue vendida y entregada con éxito.</span></div>'
+            : `<button class="btn block" id="btn-interes-desde-detalle" style="margin-top:10px;">Me interesa</button>
+          <button class="btn outline block" id="btn-continuar-entrega" style="margin-top:10px;">Continuar a coordinar entrega</button>`}
+          ${puedeMarcarVendido(p) ? '<button type="button" class="btn verde block" id="btn-detalle-vender" style="margin-top:10px;">Marcar como vendido</button>' : ''}
+          ${puedeCalificarComoComprador(p) ? '<button type="button" class="btn verde block" id="btn-detalle-calificar-vendedor" style="margin-top:10px;">★ Calificar al vendedor</button>' : ''}
+          ${puedeCalificar(p) ? '<button type="button" class="btn verde block" id="btn-detalle-calificar" style="margin-top:10px;">Registrar calificación</button>' : ''}
+        </div>
+      </div>`;
+    const principal = document.getElementById('detalle-principal');
+    const galeria = document.getElementById('detalle-galeria');
+    function mostrarPrincipal(item){
+      principal.innerHTML = '';
+      if(!item) return;
+      const img = document.createElement('img');
+      img.src = item.src;
+      img.alt = item.titulo;
+      img.style.width = '100%';
+      img.style.height = '100%';
+      img.style.objectFit = 'cover';
+      img.style.cursor = 'zoom-in';
+      img.addEventListener('click', () => abrirZoom(item.src, item.titulo));
+      principal.appendChild(img);
+    }
+    fotos.forEach((item, i) => {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      const mini = document.createElement('img');
+      mini.src = item.src;
+      mini.alt = item.titulo;
+      btn.appendChild(mini);
+      btn.addEventListener('click', () => { mostrarPrincipal(item); abrirZoom(item.src, item.titulo); });
+      galeria.appendChild(btn);
+      if(i === 0) mostrarPrincipal(item);
+    });
+    prendaActual = p;
+    const enlazar = (id, fn) => { const el = document.getElementById(id); if(el) el.addEventListener('click', fn); };
+    enlazar('btn-interes-desde-detalle', () => solicitarInteres(p, null));
+    enlazar('btn-continuar-entrega', () => showScreen('entrega'));
+    enlazar('btn-detalle-vender', () => abrirModalVenta(p, 'vender'));
+    enlazar('btn-detalle-calificar', () => abrirModalVenta(p, 'resenar'));
+    enlazar('btn-detalle-calificar-vendedor', () => abrirModalVenta(p, 'calificar'));
+    enlazar('btn-ver-vendedor', () => abrirReputacion(p.userId, p.publicador, p.zona));
+  }
+
+  document.getElementById('btn-crear-perfil').addEventListener('click', ()=>{
+    const nombre = document.getElementById('reg-nombre').value.trim();
+    const apellido = document.getElementById('reg-apellido').value.trim();
+    const correo = (isLoggedIn && currentUser) ? currentUser.correo : document.getElementById('reg-correo').value.trim();
+    const zona = document.getElementById('reg-zona').value;
+    const raw = document.getElementById('reg-whatsapp').value.replace(/\D/g,'');
+    const errorMsg = document.getElementById('registro-error');
+    const telefonoValido = /^9\d{8}$/.test(raw) || /^\d{9}$/.test(raw);
+    const correoValido = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(correo);
+    if(!nombre || !apellido || !correoValido || !zona || !telefonoValido){
+      errorMsg.textContent = 'Completa nombre, apellido, un correo válido, tu zona y un celular de 9 dígitos.';
+      errorMsg.classList.add('show');
+      return;
+    }
+    errorMsg.classList.remove('show');
+
+    const preferenciaPrevia = (miPerfil && miPerfil.preferenciaEntrega) || '';
+    miPerfil = { nombre, apellido, correo, zona, telefono: raw, preferenciaEntrega: preferenciaPrevia };
+    guardarPerfilLocal(miPerfil);
+    try{
+      localStorage.setItem(KEY_NOMBRE, nombre);
+      localStorage.setItem(KEY_TELEFONO, raw);
+      if(preferenciaPrevia) localStorage.setItem(KEY_ENTREGA, preferenciaPrevia);
+    }catch(err){ console.warn('No se pudieron guardar los datos del usuario', err); }
+
+    if(isLoggedIn && currentUser){
+      sincronizarCuenta({ nombre, apellido, telefono: raw, zona });
+      showScreen('catalogo');
+      return;
+    }
+
+    // b) Guarda el perfil en la colección "usuarios" de Firestore
+    if(firebaseListo && db){
+      db.collection('usuarios').add({
+        nombre, apellido, correo, zona, telefono: raw,
+        creado: firebase.firestore.FieldValue.serverTimestamp()
+      }).catch(err => console.error('Error guardando usuario en Firestore:', err));
+    }
+
+    showScreen('publicar');
+  });
+
+  // ============ FOTO DE LA PRENDA (input real + vista previa + Base64) ============
+  let fotoBase64 = null;
+  let fotoHashActual = null;
+  const fotosSlots = { frente: null, atras: null, defecto: null };
+
+  const FOTO_LADO_MAX = 800;
+  const FOTO_CALIDAD = 0.7;
+  const FOTO_TOPE_CHARS = 700000;
+
+  function mostrarErrorPublicar(texto){
+    const box = document.getElementById('publicar-error');
+    if(!box) return;
+    box.textContent = texto || '';
+    box.classList.toggle('show', !!texto);
+  }
+
+  function dibujarJpeg(fuente, anchoOrigen, altoOrigen, maxLado, calidad){
+    let width = anchoOrigen;
+    let height = altoOrigen;
+    const lado = Math.max(width, height);
+    if(lado > maxLado){
+      const escala = maxLado / lado;
+      width = Math.max(1, Math.round(width * escala));
+      height = Math.max(1, Math.round(height * escala));
+    }
+    const canvas = document.createElement('canvas');
+    canvas.width = width;
+    canvas.height = height;
+    const ctx = canvas.getContext('2d');
+    ctx.drawImage(fuente, 0, 0, width, height);
+    return canvas.toDataURL('image/jpeg', calidad);
+  }
+
+  async function comprimirImagen(file){
+    let fuente;
+    let ancho;
+    let alto;
+    let bitmap = null;
+    try{
+      if(window.createImageBitmap){
+        bitmap = await createImageBitmap(file);
+        fuente = bitmap;
+        ancho = bitmap.width;
+        alto = bitmap.height;
+      }else{
+        fuente = await new Promise((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => {
+            const img = new Image();
+            img.onload = () => resolve(img);
+            img.onerror = () => reject(new Error('No se pudo leer la imagen'));
+            img.src = reader.result;
+          };
+          reader.onerror = () => reject(new Error('No se pudo leer el archivo'));
+          reader.readAsDataURL(file);
+        });
+        ancho = fuente.naturalWidth || fuente.width;
+        alto = fuente.naturalHeight || fuente.height;
+      }
+      let calidad = FOTO_CALIDAD;
+      let lado = FOTO_LADO_MAX;
+      let dataUrl = dibujarJpeg(fuente, ancho, alto, lado, calidad);
+      while(dataUrl.length > FOTO_TOPE_CHARS && (calidad > 0.4 || lado > 480)){
+        if(calidad > 0.4) calidad = Math.round((calidad - 0.1) * 10) / 10;
+        else lado = Math.round(lado * 0.8);
+        dataUrl = dibujarJpeg(fuente, ancho, alto, lado, calidad);
+      }
+      if(dataUrl.length > 900000){
+        throw new Error('La foto sigue siendo demasiado pesada después de comprimirla.');
+      }
+      return dataUrl;
+    }finally{
+      if(bitmap && bitmap.close) bitmap.close();
+    }
+  }
+
+  function tieneDefectoMarcado(){
+    const sel = document.querySelector('#defecto-group .pill.selected');
+    return !!(sel && sel.dataset.defecto === 'si');
+  }
+  function sincronizarDefecto(){
+    document.getElementById('defecto-extra').hidden = !tieneDefectoMarcado();
+    document.getElementById('slot-defecto').style.display = tieneDefectoMarcado() ? 'flex' : 'none';
+  }
+  document.getElementById('defecto-group').addEventListener('click', (e) => {
+    const pill = e.target.closest('.pill');
+    if(!pill) return;
+    [...pill.parentElement.children].forEach(p => p.classList.remove('selected'));
+    pill.classList.add('selected');
+    sincronizarDefecto();
+  });
+  sincronizarDefecto();
+
+  // Miniatura (~400px) para que el catálogo cargue rápido sin bajar las fotos completas.
+  function crearMiniatura(dataUrl){
+    return new Promise((resolve) => {
+      if(!dataUrl){ resolve(null); return; }
+      const img = new Image();
+      img.onload = () => {
+        try{ resolve(dibujarJpeg(img, img.naturalWidth || img.width, img.naturalHeight || img.height, 400, 0.62)); }
+        catch(err){ resolve(null); }
+      };
+      img.onerror = () => resolve(null);
+      img.src = dataUrl;
+    });
+  }
+
+  async function cargarSlot(clave, input){
+    const file = input.files && input.files[0];
+    const slot = document.getElementById('slot-' + clave);
+    if(!file) return;
+    const hint = document.getElementById('upload-hint');
+    mostrarErrorPublicar('');
+    if(hint) hint.textContent = 'Comprimiendo foto…';
+    try{
+      const data = await comprimirImagen(file);
+      fotosSlots[clave] = data;
+      if(clave === 'frente'){
+        fotoBase64 = data;
+        fotoHashActual = await hashImagen(data);
+      }
+      let img = slot.querySelector('img');
+      if(!img){
+        img = document.createElement('img');
+        img.alt = 'Vista previa';
+        slot.prepend(img);
+      }
+      img.src = data;
+      const kb = Math.max(1, Math.round((data.length * 3 / 4) / 1024));
+      if(hint) hint.textContent = 'Vista previa lista. Esa foto pesa cerca de ' + kb + ' KB.';
+    }catch(err){
+      console.error(err);
+      fotosSlots[clave] = null;
+      if(clave === 'frente'){ fotoBase64 = null; fotoHashActual = null; }
+      const img = slot.querySelector('img');
+      if(img) img.remove();
+      input.value = '';
+      mostrarErrorPublicar('No se pudo comprimir la foto. Prueba con otra imagen.');
+    }
+  }
+  ['frente','atras','defecto'].forEach(clave => {
+    document.getElementById('foto-' + clave).addEventListener('change', (e) => cargarSlot(clave, e.target));
+  });
+
+  function abrirZoom(src, alt){
+    const box = document.getElementById('lightbox');
+    const img = document.getElementById('lightbox-img');
+    img.src = src;
+    img.alt = alt || 'Foto ampliada de la prenda';
+    box.hidden = false;
+  }
+  document.getElementById('lightbox-cerrar').addEventListener('click', () => { document.getElementById('lightbox').hidden = true; });
+  document.getElementById('lightbox').addEventListener('click', (e) => {
+    if(e.target.id === 'lightbox') document.getElementById('lightbox').hidden = true;
+  });
+
+  document.getElementById('estado-group').addEventListener('click', (e)=>{
+    if(e.target.classList.contains('pill')){
+      [...e.target.parentElement.children].forEach(p=>p.classList.remove('selected'));
+      e.target.classList.add('selected');
+    }
+  });
+  const modGroup = document.getElementById('modalidad-group');
+  const precioField = document.getElementById('precio-field');
+  function syncPrecioVisibility(){
+    const activo = modGroup.querySelector('.selected');
+    precioField.style.display = (activo && activo.dataset.mode === 'venta') ? 'block' : 'none';
+  }
+  modGroup.addEventListener('click', (e)=>{
+    if(e.target.classList.contains('pill')){
+      [...modGroup.children].forEach(p=>p.classList.remove('selected'));
+      e.target.classList.add('selected');
+      syncPrecioVisibility();
+    }
+  });
+  syncPrecioVisibility();
+
+  document.getElementById('btn-publicar').addEventListener('click', async ()=>{
+    const btnPublicar = document.getElementById('btn-publicar');
+    if(btnPublicar.disabled) return;
+    btnPublicar.disabled = true;
+    btnPublicar.textContent = 'Publicando...';
+    const resetBtnPublicar = () => {
+      btnPublicar.disabled = false;
+      btnPublicar.textContent = 'Publicar prenda';
+    };
+
+    function limpiarFormularioPublicar(){
+      fotoBase64 = null;
+      fotoHashActual = null;
+      fotosSlots.frente = fotosSlots.atras = fotosSlots.defecto = null;
+      ['frente','atras','defecto'].forEach(clave => {
+        const slot = document.getElementById('slot-' + clave);
+        const img = slot.querySelector('img');
+        if(img) img.remove();
+        document.getElementById('foto-' + clave).value = '';
+      });
+      document.getElementById('pub-desc').value = '';
+      document.getElementById('pub-defecto').value = '';
+      document.getElementById('pub-precio').value = '';
+      const hint = document.getElementById('upload-hint');
+      if(hint) hint.textContent = 'Cada foto se reduce sola antes de publicarse.';
+      mostrarErrorPublicar('');
+    }
+
+    function publicarEnLocal(nuevaPrenda){
+      const copia = Object.assign({}, nuevaPrenda, {
+        id: 'local_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 8)
+      });
+      prendas.unshift(copia);
+      const guardado = guardarPrendasLocal();
+      updateFilterOptions();
+      renderCatalog();
+      return guardado;
+    }
+
+    function cerrarPublicacion(mensaje){
+      alert(mensaje);
+      limpiarFormularioPublicar();
+      resetBtnPublicar();
+      showScreen('catalogo');
+    }
+
+    try{
+      // CRÍTICO: bloquear la publicación si el usuario no completó su registro
+      if(!estaRegistrado()){
+        alert('Debes crear tu perfil antes de publicar una prenda.');
+        showScreen('registro');
+        resetBtnPublicar();
+        return;
+      }
+
+      if(!fotosSlots.frente || !fotosSlots.atras){
+        mostrarErrorPublicar('Sube la vista frontal y la vista posterior antes de publicar.');
+        resetBtnPublicar();
+        return;
+      }
+      const detalleDefecto = document.getElementById('pub-defecto').value.trim();
+      if(tieneDefectoMarcado() && (!fotosSlots.defecto || !detalleDefecto)){
+        mostrarErrorPublicar('Si la prenda tiene una falla, sube la foto del defecto y describe la falla.');
+        resetBtnPublicar();
+        return;
+      }
+
+      if(!fotoHashActual) fotoHashActual = await hashImagen(fotoBase64);
+      await asegurarHashes();
+      if(imagenYaPublicada(fotoHashActual, fotoBase64)){
+        alert('Esta imagen ya ha sido subida anteriormente. Por favor, sube una foto distinta.');
+        resetBtnPublicar();
+        return;
+      }
+
+      const cat = document.getElementById('pub-categoria').value;
+      const talla = document.getElementById('pub-talla').value;
+      const desc = document.getElementById('pub-desc').value.trim();
+      const estadoBtn = document.getElementById('estado-group').querySelector('.selected');
+      const modoBtn = modGroup.querySelector('.selected');
+      const precio = Number(document.getElementById('pub-precio').value) || 0;
+      const estado = estadoBtn ? estadoBtn.dataset.estado : 'Buen estado';
+      const modo = modoBtn ? modoBtn.dataset.mode : 'venta';
+
+      const nuevaPrenda = {
+        cat, talla, estado, modo, precio, desc,
+        foto: fotosSlots.frente,
+        mini: await crearMiniatura(fotosSlots.frente),
+        fotos: {
+          frente: fotosSlots.frente,
+          atras: fotosSlots.atras,
+          defecto: tieneDefectoMarcado() ? fotosSlots.defecto : null
+        },
+        tieneDefecto: tieneDefectoMarcado(),
+        detalleDefecto: tieneDefectoMarcado() ? detalleDefecto : '',
+        fotoHash: fotoHashActual,
+        status: 'available',
+        userId: miUserId,
+        publicador: (miPerfil.nombre + ' ' + (miPerfil.apellido || '')).trim(),
+        zona: miPerfil.zona,
+        telefono: miPerfil.telefono,
+        whatsapp: '51' + miPerfil.telefono,
+        fecha: new Date().toISOString()
+      };
+
+      if(firebaseListo && db){
+        try{
+          const docRef = await db.collection('prendas').add({
+            publicador: nuevaPrenda.publicador,
+            zona: nuevaPrenda.zona,
+            telefono: nuevaPrenda.telefono,
+            cat: nuevaPrenda.cat,
+            talla: nuevaPrenda.talla,
+            estado: nuevaPrenda.estado,
+            modo: nuevaPrenda.modo,
+            precio: nuevaPrenda.precio,
+            desc: nuevaPrenda.desc,
+            foto: nuevaPrenda.foto,
+            mini: nuevaPrenda.mini || null,
+            fotoBase64: nuevaPrenda.foto,
+            fotos: nuevaPrenda.fotos,
+            tieneDefecto: nuevaPrenda.tieneDefecto,
+            detalleDefecto: nuevaPrenda.detalleDefecto,
+            fotoHash: nuevaPrenda.fotoHash,
+            status: 'available',
+            userId: nuevaPrenda.userId,
+            fecha: firebase.firestore.FieldValue.serverTimestamp(),
+            createdAt: firebase.firestore.FieldValue.serverTimestamp()
+          });
+          if(!prendas.some(p => p.id === docRef.id)){
+            prendas.unshift(Object.assign({}, nuevaPrenda, { id: docRef.id }));
+            guardarPrendasLocal();
+            updateFilterOptions();
+            renderCatalog();
+          }
+          cerrarPublicacion('¡Prenda publicada con éxito! Ya es visible para tus vecinos.');
+        }catch(err){
+          console.error('Error publicando en Firestore:', err);
+          const detalle = (err && (err.message || err.code)) ? ' (' + (err.code || err.message) + ')' : '';
+          mostrarErrorPublicar('No se pudo guardar la prenda en Firestore' + detalle + '. La foto ya está comprimida; revisa tu conexión e inténtalo de nuevo.');
+          resetBtnPublicar();
+        }
+      } else {
+        const guardado = publicarEnLocal(nuevaPrenda);
+        cerrarPublicacion(guardado
+          ? '¡Prenda publicada! Quedó guardada en este navegador.'
+          : 'La prenda se mostró, pero el navegador no tuvo espacio para recordarla al recargar.');
+      }
+    }catch(err){
+      console.error('Error al publicar:', err);
+      mostrarErrorPublicar('No se pudo publicar la prenda. ' + (err && err.message ? err.message : 'Inténtalo de nuevo.'));
+      resetBtnPublicar();
+    }
+  });
+
+  ['f-cat','f-talla','f-mod'].forEach(id => document.getElementById(id).addEventListener('change', renderCatalog));
+  document.getElementById('btn-limpiar').addEventListener('click', ()=>{
+    document.getElementById('f-cat').value = '';
+    document.getElementById('f-talla').value = '';
+    document.getElementById('f-mod').value = '';
+    soloMias = false;
+    soloPendientes = false;
+    renderCatalog();
+  });
+  document.getElementById('btn-ver-todas').addEventListener('click', () => { soloMias = false; soloPendientes = false; renderCatalog(); });
+
+  const entregaDesdeTarjeta = { publico: 'Punto público seguro', envio: 'Envío motorizado' };
+  document.querySelectorAll('.entrega-card').forEach(card=>{
+    card.addEventListener('click', ()=>{
+      document.querySelectorAll('.entrega-card').forEach(c=>c.classList.remove('selected'));
+      card.classList.add('selected');
+      document.getElementById('entrega-confirm').style.display = 'block';
+      const preferencia = entregaDesdeTarjeta[card.dataset.entrega];
+      const datos = leerDatosUsuario();
+      if(datos.nombre && telefonoEsValido(datos.telefono) && preferenciaValida(preferencia)){
+        persistirDatosUsuario({ nombre: datos.nombre, telefono: datos.telefono, preferencia });
+      }
+      if(!prendaActual) return;
+      const p = prendaActual;
+      registrarInteres(p, preferencia);
+      const waUrl = urlWhatsApp(p, preferencia);
+      const nombreVendedor = (p.publicador || 'vecino/a').split(' ')[0];
+      document.getElementById('entrega-whatsapp-wrap').innerHTML = `
+        <a class="whatsapp-btn" id="btn-whatsapp-entrega" href="${waUrl}" target="_blank" rel="noopener">
+          ${WHATSAPP_ICON} Contactar a ${nombreVendedor} por WhatsApp
+        </a>`;
+      abrirWhatsApp(p, preferencia);
+    });
+  });
+
+  document.getElementById('btn-nav-chat').addEventListener('click', () => pedirSesion(() => showScreen('mensajes')));
+  document.getElementById('chat-back').addEventListener('click', () => {
+    conversacionActivaId = null;
+    document.getElementById('chat-shell').classList.remove('en-hilo');
+    document.getElementById('chat-active').hidden = true;
+    document.getElementById('chat-empty').hidden = false;
+    renderListaChats();
+  });
+  document.getElementById('chat-form').addEventListener('submit', (e) => {
+    e.preventDefault();
+    const input = document.getElementById('chat-input');
+    const texto = input.value.trim();
+    if(!texto) return;
+    input.value = '';
+    enviarMensajeChat(texto).catch(err => {
+      console.error(err);
+      alert('No se pudo enviar el mensaje.');
+    });
+  });
+  document.getElementById('btn-reservar').addEventListener('click', () => {
+    const conv = conversaciones.find(c => c.id === conversacionActivaId);
+    if(!conv) return;
+    const prenda = prendas.find(p => p.id === conv.product_id);
+    if(prenda) prendaActual = prenda;
+    showScreen('entrega');
+  });
+  escucharConversaciones();
+
+  document.getElementById('btn-mis-datos').addEventListener('click', () => pedirSesion(() => abrirModalDatos('editar')));
+  document.getElementById('btn-avatar-datos').addEventListener('click', () => pedirSesion(() => abrirModalDatos('editar')));
+  document.getElementById('modal-datos-cerrar').addEventListener('click', cerrarModalDatos);
+  document.getElementById('modal-datos-guardar').addEventListener('click', guardarModalDatos);
+  document.getElementById('modal-datos').addEventListener('click', (e) => {
+    if(e.target.id === 'modal-datos') cerrarModalDatos();
+  });
+  document.getElementById('modal-entrega-group').addEventListener('click', (e) => {
+    const pill = e.target.closest('.pill');
+    if(!pill) return;
+    [...pill.parentElement.children].forEach(p => p.classList.remove('selected'));
+    pill.classList.add('selected');
+  });
+  document.addEventListener('keydown', (e) => {
+    if(e.key === 'Escape' && !document.getElementById('modal-datos').hidden) cerrarModalDatos();
+  });
+
+  if(!firebaseListo){ cargarPrendasLocal(); catalogoListo = true; }
+  // Con Firebase: si hay copia de una visita anterior, se muestra al instante mientras llega la versión nueva.
+  else if(cargarPrendasLocal() && prendas.length) catalogoListo = true;
+  cargarResenasLocal();
+  if(firebaseListo && db){
+    db.collection('resenas').onSnapshot((snap) => {
+      const nube = [];
+      snap.forEach(doc => nube.push(doc.data()));
+      resenas = nube;
+      guardarResenasLocal();
+      renderCatalog();
+    }, (err) => console.error('Error escuchando reseñas:', err));
+  }
+  updateFilterOptions();
+  renderCatalog();
+  if(!firebaseListo){
+    asegurarHashes().then(cambio => { if(cambio) guardarPrendasLocal(); });
+  }
+
+  function millisDeFecha(valor){
+    if(!valor) return 0;
+    if(typeof valor.toMillis === 'function') return valor.toMillis();
+    if(typeof valor.seconds === 'number') return valor.seconds * 1000;
+    if(typeof valor === 'number') return valor;
+    const parsed = Date.parse(valor);
+    return Number.isNaN(parsed) ? 0 : parsed;
+  }
+
+  function mapPrendaFirestore(doc){
+    const d = doc.data() || {};
+    const telefono = d.telefono ? String(d.telefono).replace(/\D/g, '') : '';
+    return {
+      id: doc.id,
+      cat: d.cat || 'Prenda',
+      talla: d.talla || '',
+      estado: d.estado || '',
+      modo: d.modo || 'venta',
+      precio: d.precio || 0,
+      desc: d.desc || '',
+      foto: d.foto || d.fotoBase64 || (d.fotos && (d.fotos.frente || d.fotos.atras)) || null,
+      mini: d.mini || null,
+      fotos: d.fotos || null,
+      tieneDefecto: !!d.tieneDefecto,
+      detalleDefecto: d.detalleDefecto || '',
+      fotoHash: d.fotoHash || null,
+      status: d.status === 'sold' ? 'sold' : 'available',
+      soldAt: d.soldAt || null,
+      comisionEstado: d.comisionEstado || '',
+      comisionOperacion: d.comisionOperacion || '',
+      comisionSolicitadaAt: d.comisionSolicitadaAt || null,
+      buyerId: d.buyerId || null,
+      buyerName: d.buyerName || '',
+      userId: d.userId || null,
+      publicador: d.publicador || 'Vecino',
+      zona: d.zona || '',
+      telefono,
+      whatsapp: d.whatsapp || (telefono ? '51' + telefono : ''),
+      fechaMs: millisDeFecha(d.fecha || d.createdAt)
+    };
+  }
+
+  // Catálogo compartido: todas las prendas de Firestore, sin filtrar por userId.
+  // Versión ligera (REST, llega primero). Si la completa de Firestore ya llegó, se descarta.
+  let catalogoCompletoLlegado = false;
+  if(firebaseListo && window.__prendasRapidas){
+    window.__prendasRapidas.then((filas) => {
+      if(!filas || catalogoCompletoLlegado) return;
+      const lista = filas.map(mapPrendaFirestore);
+      lista.sort((a, b) => (b.fechaMs || 0) - (a.fechaMs || 0));
+      prendas.length = 0;
+      prendas.push(...lista);
+      catalogoListo = true;
+      updateFilterOptions();
+      renderCatalog();
+      guardarPrendasLocal();
+    });
+  }
+
+  // Catálogo compartido: todas las prendas de Firestore, sin filtrar por userId.
+  if(firebaseListo && db){
+    db.collection('prendas').onSnapshot((snapshot) => {
+      catalogoCompletoLlegado = true;
+      catalogoListo = true;
+      const nuevasPrendas = [];
+      snapshot.forEach((doc) => nuevasPrendas.push(mapPrendaFirestore(doc)));
+      nuevasPrendas.sort((a, b) => (b.fechaMs || 0) - (a.fechaMs || 0));
+      prendas.length = 0;
+      prendas.push(...nuevasPrendas);
+      updateFilterOptions();
+      renderCatalog();
+      guardarPrendasLocal();
+      asegurarHashes().then(cambio => { if(cambio) guardarPrendasLocal(); });
+    }, (err) => {
+      console.error('Error escuchando cambios en Firestore (prendas):', err);
+      cargarPrendasLocal();
+      catalogoListo = true;
+      updateFilterOptions();
+      renderCatalog();
+    });
+  }
+})();
+</script>
+
+</body>
+</html>
