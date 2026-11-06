@@ -1,0 +1,15 @@
+{
+  "name": "ropero-vecinal-scripts",
+  "private": true,
+  "type": "module",
+  "description": "Migración de seguridad y tareas de administración de Ropero Vecinal (firebase-admin).",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "migrar": "node migrar.mjs"
+  },
+  "dependencies": {
+    "firebase-admin": "^14.5.0"
+  }
+}
