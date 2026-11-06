@@ -7,19 +7,30 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Ropero Vecinal — Prototipo</title>
+<script>
+// Modo emulador (solo pruebas locales): en localhost o 127.0.0.1 con ?emulador=1 la página usa
+// los emuladores de Firebase (Auth en :9099 y Firestore en :8080) y el proyecto demo-ropero-vecinal.
+window.__RV_EMULADOR = (function(){
+  try{
+    const local = ['localhost', '127.0.0.1', '[::1]', '::1'].indexOf(location.hostname) !== -1;
+    return local && new URLSearchParams(location.search).get('emulador') === '1';
+  }catch(e){ return false; }
+})();
+</script>
 <!-- Google Analytics (visitas nuevas por día y tiempo en la página) -->
 <script async src="https://www.googletagmanager.com/gtag/js?id=G-XB2B5ZB2TY"></script>
 <script>
   window.dataLayer = window.dataLayer || [];
   function gtag(){ dataLayer.push(arguments); }
   gtag('js', new Date());
-  gtag('config', 'G-XB2B5ZB2TY');
+  if(!window.__RV_EMULADOR) gtag('config', 'G-XB2B5ZB2TY');
 </script>
 <link rel="preconnect" href="https://firestore.googleapis.com">
 <link rel="preconnect" href="https://www.gstatic.com" crossorigin>
 <script>
 // Carga rápida del catálogo: pide a Firestore (REST) solo los datos ligeros + miniatura,
 // en paralelo con la descarga de las librerías de Firebase. Las fotos completas llegan después.
+// El teléfono del vendedor ya no está en la prenda: vive en prendas/{id}/privado/contacto.
 window.__prendasRapidas = (function(){
   function val(v){
     if(!v) return null;
@@ -32,11 +43,14 @@ window.__prendasRapidas = (function(){
     if('arrayValue' in v) return (v.arrayValue.values || []).map(val);
     return null;
   }
-  const campos = ['publicador','zona','telefono','whatsapp','cat','talla','estado','modo','precio','desc','mini',
+  const campos = ['publicador','zona','cat','talla','estado','modo','precio','desc','mini',
     'tieneDefecto','detalleDefecto','fotoHash','userId','fecha','createdAt','status','soldAt','buyerId','buyerName',
     'comisionEstado','comisionOperacion','comisionSolicitadaAt'];
+  const url = window.__RV_EMULADOR
+    ? 'http://127.0.0.1:8080/v1/projects/demo-ropero-vecinal/databases/(default)/documents:runQuery'
+    : 'https://firestore.googleapis.com/v1/projects/ropero-vecinal/databases/(default)/documents:runQuery';
   try{
-    return fetch('https://firestore.googleapis.com/v1/projects/ropero-vecinal/databases/(default)/documents:runQuery', {
+    return fetch(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ structuredQuery: { from: [{ collectionId: 'prendas' }], select: { fields: campos.map(c => ({ fieldPath: c })) } } })
@@ -403,6 +417,7 @@ window.__prendasRapidas = (function(){
   .auth-tabs{display:flex; gap:8px; margin-bottom:14px;}
   .auth-tabs button{flex:1; border:1px solid var(--line); background:#fff; border-radius:999px; padding:8px; font:inherit; cursor:pointer;}
   .auth-tabs button.active{background:var(--accent); color:#fff; border-color:var(--accent);}
+  .auth-o{text-align:center; color:var(--ink-soft); font-size:12.5px; margin:10px 0 12px;}
   .pass-row{display:flex; gap:8px;}
   .pass-row input{flex:1;}
   .user-menu{position:relative;}
@@ -697,7 +712,7 @@ window.__prendasRapidas = (function(){
         <div class="field">
           <label for="reg-whatsapp">Número de WhatsApp</label>
           <input type="tel" id="reg-whatsapp" placeholder="Ej. 987 654 321" inputmode="numeric" required>
-          <span class="hint">Solo se muestra a la persona que marque "Me interesa" en tus prendas, después de coordinar la entrega.</span>
+          <span class="hint">Solo se muestra a la persona que marque "Me interesa" en tus prendas.</span>
         </div>
         <p class="error-msg" id="registro-error">Completa nombre, apellido, correo, zona y celular para continuar.</p>
         <button class="btn" id="btn-crear-perfil">Crear perfil y continuar</button>
@@ -865,6 +880,9 @@ window.__prendasRapidas = (function(){
       <button type="button" id="tab-crear" class="active">Crear cuenta</button>
       <button type="button" id="tab-entrar">Iniciar sesión</button>
     </div>
+    <button type="button" class="btn outline block" id="btn-google">Continuar con Google</button>
+    <p class="error-msg" id="auth-error-google" style="margin-top:8px;"></p>
+    <p class="auth-o">o con tu correo</p>
     <form id="form-crear">
       <div class="two-col">
         <div class="field"><label for="auth-nombre">Nombre</label><input id="auth-nombre" type="text" required></div>
@@ -888,9 +906,9 @@ window.__prendasRapidas = (function(){
       <div class="field"><label for="login-pass">Contraseña</label><div class="pass-row"><input id="login-pass" type="password" minlength="6" required><button type="button" class="btn outline" id="ver-pass-login">Ver</button></div></div>
       <button type="button" class="datos-link" id="btn-olvide">¿Olvidaste tu contraseña?</button>
       <div id="recuperar-box" hidden>
-        <p class="hint">En este prototipo no enviamos un correo. Si la cuenta existe, puedes definir una contraseña nueva aquí.</p>
-        <div class="field"><label for="nueva-pass">Nueva contraseña</label><input id="nueva-pass" type="password" minlength="6"></div>
-        <button type="button" class="btn outline" id="btn-nueva-pass">Guardar nueva contraseña</button>
+        <p class="hint">Escribe arriba el correo de tu cuenta y te enviaremos un enlace para elegir una contraseña nueva.</p>
+        <button type="button" class="btn outline" id="btn-nueva-pass">Enviar enlace a mi correo</button>
+        <p class="confirm-msg" id="recuperar-ok" style="margin:10px 0 14px;"></p>
       </div>
       <p class="error-msg" id="auth-error-login"></p>
       <button class="btn verde block" type="submit">Entrar</button>
@@ -1000,7 +1018,7 @@ window.__prendasRapidas = (function(){
 <div class="modal-overlay" id="modal-datos" hidden>
   <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="modal-datos-titulo">
     <h3 id="modal-datos-titulo">Mis datos</h3>
-    <p class="screen-goal" id="modal-datos-ayuda">Puedes actualizar tu nombre, WhatsApp y preferencia de entrega. Se guardan en este navegador.</p>
+    <p class="screen-goal" id="modal-datos-ayuda">Puedes actualizar tu nombre, WhatsApp y preferencia de entrega. Se guardan en tu cuenta.</p>
     <div class="field">
       <label for="modal-nombre">Nombre</label>
       <input type="text" id="modal-nombre" placeholder="Ej. Camila R." autocomplete="name">
@@ -1035,6 +1053,7 @@ window.__prendasRapidas = (function(){
 
 <!-- ============ FIREBASE SDK (compat) ============ -->
 <script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore-compat.js"></script>
 <script>
   // ============ CONFIGURACIÓN DE FIREBASE ============
@@ -1064,13 +1083,24 @@ window.__prendasRapidas = (function(){
   }
 
   let db = null;
+  let auth = null;
   let firebaseListo = false;
+  // Pruebas locales: proyecto demo (nunca toca el proyecto real) y emuladores en 127.0.0.1.
+  const MODO_EMULADOR = !!window.__RV_EMULADOR;
+  if(MODO_EMULADOR) firebaseConfig.projectId = 'demo-ropero-vecinal';
   if(!firebaseConfigEsReal(firebaseConfig)){
     console.warn('firebaseConfig sigue con valores de ejemplo. Las prendas se guardan en este navegador.');
   } else {
     try {
       firebase.initializeApp(firebaseConfig);
       db = firebase.firestore();
+      auth = firebase.auth();
+      auth.languageCode = 'es';
+      if(MODO_EMULADOR){
+        auth.useEmulator('http://127.0.0.1:9099', { disableWarnings: true });
+        db.useEmulator('127.0.0.1', 8080);
+        console.info('Modo emulador: Auth en 127.0.0.1:9099 y Firestore en 127.0.0.1:8080 (proyecto demo-ropero-vecinal).');
+      }
       firebaseListo = true;
     } catch (err) {
       console.warn('Firebase no se pudo inicializar. Se usará almacenamiento local.', err);
@@ -1083,25 +1113,18 @@ window.__prendasRapidas = (function(){
   const WHATSAPP_ICON = '<svg width="17" height="17" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12.04 2C6.58 2 2.13 6.45 2.13 11.91c0 1.75.46 3.45 1.32 4.95L2.05 22l5.25-1.38a9.9 9.9 0 0 0 4.74 1.21h.01c5.46 0 9.9-4.45 9.9-9.91 0-2.65-1.03-5.14-2.9-7.01A9.82 9.82 0 0 0 12.04 2m0 1.67c2.2 0 4.27.86 5.82 2.42a8.2 8.2 0 0 1 2.42 5.82c0 4.54-3.7 8.24-8.25 8.24a8.2 8.2 0 0 1-4.19-1.15l-.3-.18-3.12.82.83-3.04-.2-.31a8.18 8.18 0 0 1-1.26-4.38c0-4.55 3.7-8.24 8.25-8.24M8.53 7.1c-.17 0-.45.06-.68.32-.23.25-.9.87-.9 2.13 0 1.26.92 2.47 1.04 2.64.13.17 1.78 2.85 4.42 3.89 2.19.86 2.63.69 3.11.65.48-.04 1.55-.63 1.77-1.24.22-.61.22-1.13.15-1.24-.06-.11-.24-.17-.5-.3-.26-.13-1.55-.77-1.79-.86-.24-.09-.42-.13-.59.13-.17.26-.68.86-.83 1.04-.15.17-.31.19-.57.06-.26-.13-1.09-.4-2.08-1.28-.77-.68-1.29-1.53-1.44-1.79-.15-.26-.02-.4.11-.53.12-.12.26-.31.39-.47.13-.15.17-.26.26-.43.09-.17.04-.32-.02-.45C9.5 7.9 9 6.72 8.75 6.2c-.19-.4-.4-.4-.59-.4Z"/></svg>';
   let prendaActual = null;
 
-  // ============ PERFIL / SESIÓN (localStorage) ============
-  const PERFIL_KEY = 'ropero_vecinal_perfil';
-  function cargarPerfilLocal(){
-    try{
-      const raw = localStorage.getItem(PERFIL_KEY);
-      return raw ? JSON.parse(raw) : null;
-    }catch(err){
-      console.warn('No se pudo leer el perfil de localStorage', err);
-      return null;
-    }
-  }
-  function guardarPerfilLocal(perfil){
-    try{ localStorage.setItem(PERFIL_KEY, JSON.stringify(perfil)); }catch(err){ console.warn('No se pudo guardar el perfil en localStorage', err); }
-  }
-  let miPerfil = cargarPerfilLocal(); // {nombre, zona, telefono, preferenciaEntrega}
+  // ============ PERFIL / SESIÓN (Firebase Authentication + Firestore) ============
+  // Las cuentas viven en Firebase Authentication y sirven en cualquier dispositivo.
+  // Perfil público mínimo en usuarios/{uid} (nombre, inicial del apellido y zona) y datos de contacto
+  // en usuarios/{uid}/privado/datos, que solo leen su dueño y el admin.
+  // Las claves de la versión anterior (cuentas y perfil guardados en este navegador) ya no se usan.
+  ['ropero_cuentas', 'ropero_sesion', 'ropero_vecinal_perfil', 'ropero_vecinal_user_id',
+   'usuarioNombre', 'usuarioTelefono', 'usuarioPreferenciaEntrega'].forEach(k => {
+    try{ localStorage.removeItem(k); }catch(err){ /* sin localStorage */ }
+  });
 
-  const KEY_NOMBRE = 'usuarioNombre';
-  const KEY_TELEFONO = 'usuarioTelefono';
-  const KEY_ENTREGA = 'usuarioPreferenciaEntrega';
+  let miPerfil = null; // {nombre, apellido, correo, zona, telefono, preferenciaEntrega}
+  let miUserId = null; // uid de Firebase Auth mientras haya sesión
   const ENTREGAS = ['Punto público seguro', 'Envío motorizado'];
 
   function telefonoSoloDigitos(valor){
@@ -1114,61 +1137,83 @@ window.__prendasRapidas = (function(){
   function preferenciaValida(valor){
     return ENTREGAS.indexOf(valor) !== -1;
   }
-  function sincronizarClavesUsuario(){
-    if(!miPerfil) return;
-    try{
-      if(miPerfil.nombre && !localStorage.getItem(KEY_NOMBRE)) localStorage.setItem(KEY_NOMBRE, miPerfil.nombre);
-      if(miPerfil.telefono && !localStorage.getItem(KEY_TELEFONO)) localStorage.setItem(KEY_TELEFONO, miPerfil.telefono);
-      if(miPerfil.preferenciaEntrega && !localStorage.getItem(KEY_ENTREGA)) localStorage.setItem(KEY_ENTREGA, miPerfil.preferenciaEntrega);
-    }catch(err){ console.warn('No se pudieron sincronizar los datos del usuario', err); }
-  }
   function leerDatosUsuario(){
-    let nombre = '', telefono = '', preferencia = '';
-    try{
-      nombre = localStorage.getItem(KEY_NOMBRE) || (miPerfil && miPerfil.nombre) || '';
-      telefono = localStorage.getItem(KEY_TELEFONO) || (miPerfil && miPerfil.telefono) || '';
-      preferencia = localStorage.getItem(KEY_ENTREGA) || (miPerfil && miPerfil.preferenciaEntrega) || '';
-    }catch(err){ /* noop */ }
-    return { nombre: String(nombre).trim(), telefono: telefonoSoloDigitos(telefono), preferencia };
+    const p = miPerfil || {};
+    return { nombre: String(p.nombre || '').trim(), telefono: telefonoSoloDigitos(p.telefono), preferencia: p.preferenciaEntrega || '' };
   }
   function datosInteresListos(){
     const datos = leerDatosUsuario();
     return !!(datos.nombre && telefonoEsValido(datos.telefono) && preferenciaValida(datos.preferencia));
   }
+  // «Nombre A.»: lo único del nombre que ven los demás vecinos.
+  function nombreCorto(nombre, apellido){
+    const n = String(nombre || '').trim();
+    const inicial = String(apellido || '').trim().slice(0, 1).toUpperCase();
+    return (n + (inicial ? ' ' + inicial + '.' : '')).trim();
+  }
+  function esIdNube(id){ return !!id && String(id).indexOf('local_') !== 0; }
+
+  // Guarda el perfil: lo público en usuarios/{uid} y lo de contacto en usuarios/{uid}/privado/datos.
+  function guardarPerfilNube(uid, perfil, nuevo){
+    if(!(firebaseListo && db && uid)) return Promise.resolve();
+    const ref = db.collection('usuarios').doc(uid);
+    const ahora = firebase.firestore.FieldValue.serverTimestamp();
+    const publico = {
+      nombre: String(perfil.nombre || '').trim(),
+      apellidoInicial: String(perfil.apellido || '').trim().slice(0, 1).toUpperCase(),
+      zona: perfil.zona || '',
+      actualizado: ahora
+    };
+    if(nuevo) publico.creado = ahora;
+    const lote = db.batch();
+    lote.set(ref, publico, { merge: true });
+    lote.set(ref.collection('privado').doc('datos'), {
+      apellido: String(perfil.apellido || '').trim(),
+      correo: perfil.correo || '',
+      telefono: telefonoSoloDigitos(perfil.telefono),
+      preferenciaEntrega: perfil.preferenciaEntrega || '',
+      actualizado: ahora
+    }, { merge: true });
+    return lote.commit();
+  }
+  async function leerPerfilNube(uid){
+    if(!(firebaseListo && db && uid)) return null;
+    const ref = db.collection('usuarios').doc(uid);
+    const [pub, priv] = await Promise.all([ref.get(), ref.collection('privado').doc('datos').get()]);
+    if(!pub.exists && !priv.exists) return null;
+    const a = pub.exists ? pub.data() : {};
+    const b = priv.exists ? priv.data() : {};
+    return {
+      nombre: a.nombre || '',
+      apellido: b.apellido || '',
+      correo: b.correo || '',
+      zona: a.zona || '',
+      telefono: b.telefono || '',
+      preferenciaEntrega: b.preferenciaEntrega || ''
+    };
+  }
+  // Si cambió el WhatsApp, se actualiza el contacto privado de las prendas propias aún disponibles.
+  function actualizarContactoDePrendas(){
+    const tel = telefonoSoloDigitos(miPerfil && miPerfil.telefono);
+    if(!(firebaseListo && db) || !telefonoEsValido(tel)) return Promise.resolve();
+    const mias = prendas.filter(p => esPrendaPropia(p) && !estaVendida(p) && esIdNube(p.id));
+    return Promise.all(mias.map(p => db.collection('prendas').doc(p.id).collection('privado').doc('contacto').set({ telefono: tel })));
+  }
+  function guardarCambiosPerfil(telefonoAntes){
+    return guardarPerfilNube(miUserId, miPerfil, false).then(() => {
+      if(telefonoSoloDigitos(miPerfil.telefono) !== telefonoAntes) return actualizarContactoDePrendas();
+    });
+  }
   function persistirDatosUsuario(datos){
-    const zona = (miPerfil && miPerfil.zona) || '';
-    miPerfil = {
+    const telefonoAntes = telefonoSoloDigitos(miPerfil && miPerfil.telefono);
+    miPerfil = Object.assign({}, miPerfil || {}, {
       nombre: datos.nombre,
-      apellido: (miPerfil && miPerfil.apellido) || '',
-      correo: (miPerfil && miPerfil.correo) || '',
-      zona,
       telefono: telefonoSoloDigitos(datos.telefono),
       preferenciaEntrega: datos.preferencia
-    };
-    guardarPerfilLocal(miPerfil);
-    try{
-      localStorage.setItem(KEY_NOMBRE, miPerfil.nombre);
-      localStorage.setItem(KEY_TELEFONO, miPerfil.telefono);
-      localStorage.setItem(KEY_ENTREGA, miPerfil.preferenciaEntrega);
-    }catch(err){ console.warn('No se pudieron guardar usuarioNombre, usuarioTelefono o usuarioPreferenciaEntrega', err); }
+    });
     sincronizarCuenta({ nombre: miPerfil.nombre, telefono: miPerfil.telefono });
-  }
-  sincronizarClavesUsuario();
-
-  const USER_ID_KEY = 'ropero_vecinal_user_id';
-  function obtenerUserId(){
-    let id = null;
-    try{ id = localStorage.getItem(USER_ID_KEY); }catch(err){ id = null; }
-    if(!id){
-      id = 'user_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 10);
-      try{ localStorage.setItem(USER_ID_KEY, id); }catch(err){ console.warn('No se pudo guardar userId', err); }
-    }
-    return id;
-  }
-  let miUserId = obtenerUserId();
-
-  function obtenerCompradorId(){
-    return miUserId || obtenerUserId();
+    if(!sesionActiva()) return Promise.resolve();
+    return guardarCambiosPerfil(telefonoAntes);
   }
 
   function estaRegistrado(){ return !!(miPerfil && miPerfil.nombre && miPerfil.apellido && miPerfil.correo && miPerfil.zona && miPerfil.telefono); }
@@ -1188,63 +1233,67 @@ window.__prendasRapidas = (function(){
     document.getElementById('reg-correo').readOnly = false;
     document.getElementById('btn-crear-perfil').textContent = 'Crear perfil y continuar';
   }
-  // Mantiene la cuenta guardada (ropero_cuentas) alineada con ediciones de perfil.
+  // Mantiene currentUser alineado con las ediciones del perfil.
   function sincronizarCuenta(cambios){
     if(!(isLoggedIn && currentUser)) return;
     Object.assign(currentUser, cambios);
-    const cuentas = leerCuentas();
-    const i = cuentas.findIndex(c => c.correo === currentUser.correo);
-    if(i >= 0){ Object.assign(cuentas[i], cambios); guardarCuentas(cuentas); }
     pintarSesion();
   }
 
   const tabs = document.querySelectorAll('.tab-pill[data-screen]');
   const screens = document.querySelectorAll('.screen');
-  const CUENTAS_KEY = 'ropero_cuentas';
-  const SESION_KEY = 'ropero_sesion';
   let isLoggedIn = false;
   let currentUser = null;
   let showAuthModal = false;
   let accionPendiente = null;
+  let soyAdmin = false;      // existe admins/{uid}; se lee una vez al iniciar sesión
+  let authManual = false;    // true mientras el modal maneja el ingreso (onAuthStateChanged no interviene)
 
   function sesionActiva(){ return !!(isLoggedIn && currentUser); }
 
-  async function hashClave(texto){
-    const bytes = new TextEncoder().encode(String(texto));
-    if(window.crypto && crypto.subtle){
-      const buf = await crypto.subtle.digest('SHA-256', bytes);
-      return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2,'0')).join('');
+  async function leerEsAdmin(uid){
+    if(!(firebaseListo && db && uid)) return false;
+    try{ return (await db.collection('admins').doc(uid).get()).exists; }
+    catch(err){ console.warn('No se pudo comprobar si la cuenta es admin', err); return false; }
+  }
+  function perfilDesdeAuth(user){
+    const partes = String(user.displayName || '').trim().split(/\s+/).filter(Boolean);
+    return { nombre: partes[0] || '', apellido: partes.slice(1).join(' '), correo: user.email || '', zona: '', telefono: '', preferenciaEntrega: '' };
+  }
+  // Arma la sesión (currentUser, miPerfil, rol) a partir del usuario de Firebase Auth.
+  async function entrarConUsuario(user, perfil){
+    let datos = perfil || null;
+    if(!datos){
+      try{ datos = await leerPerfilNube(user.uid); }
+      catch(err){ console.error('No se pudo leer tu perfil', err); }
     }
-    let h = 0;
-    for(let i = 0; i < texto.length; i++) h = Math.imul(h ^ texto.charCodeAt(i), 16777619);
-    return 'fb_' + (h >>> 0).toString(16);
-  }
-  function leerCuentas(){
-    try{ return JSON.parse(localStorage.getItem(CUENTAS_KEY) || '[]'); }catch(err){ return []; }
-  }
-  function guardarCuentas(lista){
-    localStorage.setItem(CUENTAS_KEY, JSON.stringify(lista));
-  }
-  function aplicarUsuario(cuenta){
-    currentUser = cuenta;
+    const base = datos || perfilDesdeAuth(user);
+    miPerfil = Object.assign({}, base, { correo: base.correo || user.email || '' });
+    miUserId = user.uid;
+    currentUser = Object.assign({ userId: user.uid }, miPerfil);
     isLoggedIn = true;
-    miUserId = cuenta.userId;
-    try{ localStorage.setItem(USER_ID_KEY, cuenta.userId); localStorage.setItem(SESION_KEY, cuenta.correo); }catch(err){}
-    miPerfil = {
-      nombre: cuenta.nombre,
-      apellido: cuenta.apellido,
-      correo: cuenta.correo,
-      zona: cuenta.zona,
-      telefono: cuenta.telefono,
-      preferenciaEntrega: (miPerfil && miPerfil.preferenciaEntrega) || localStorage.getItem(KEY_ENTREGA) || ''
-    };
-    guardarPerfilLocal(miPerfil);
-    try{
-      localStorage.setItem(KEY_NOMBRE, cuenta.nombre);
-      localStorage.setItem(KEY_TELEFONO, cuenta.telefono);
-    }catch(err){}
+    soyAdmin = await leerEsAdmin(user.uid);
     pintarSesion();
     autocompletarRegistro();
+    reiniciarChat();
+    renderCatalog();
+    actualizarMenuPagos();
+  }
+  function salirLocal(){
+    isLoggedIn = false;
+    currentUser = null;
+    miPerfil = null;
+    miUserId = null;
+    soyAdmin = false;
+    soloMias = false;
+    soloPendientes = false;
+    contactos.clear();
+    contactoEnCamino.clear();
+    pintarSesion();
+    limpiarRegistro();
+    reiniciarChat();
+    renderCatalog();
+    actualizarMenuPagos();
   }
   function pintarSesion(){
     const entrar = document.getElementById('btn-entrar');
@@ -1252,9 +1301,9 @@ window.__prendasRapidas = (function(){
     if(sesionActiva()){
       entrar.hidden = true;
       menu.hidden = false;
-      const ini = (currentUser.nombre[0] || '') + (currentUser.apellido[0] || '');
-      document.getElementById('user-iniciales').textContent = ini.toUpperCase();
-      document.getElementById('user-corto').textContent = currentUser.nombre;
+      const ini = ((currentUser.nombre || '')[0] || '') + ((currentUser.apellido || '')[0] || '');
+      document.getElementById('user-iniciales').textContent = ini.toUpperCase() || 'RV';
+      document.getElementById('user-corto').textContent = currentUser.nombre || 'Vecino';
     }else{
       entrar.hidden = false;
       menu.hidden = true;
@@ -1267,6 +1316,7 @@ window.__prendasRapidas = (function(){
     const crear = tab !== 'entrar';
     document.getElementById('auth-error-crear').classList.remove('show');
     document.getElementById('auth-error-login').classList.remove('show');
+    document.getElementById('auth-error-google').classList.remove('show');
     document.getElementById('form-crear').hidden = !crear;
     document.getElementById('form-entrar').hidden = crear;
     document.getElementById('tab-crear').classList.toggle('active', crear);
@@ -1286,13 +1336,6 @@ window.__prendasRapidas = (function(){
     accionPendiente = null;
     cerrarAuth();
     if(accion) accion();
-  }
-  function restaurarSesion(){
-    const correo = localStorage.getItem(SESION_KEY);
-    if(!correo){ pintarSesion(); return; }
-    const cuenta = leerCuentas().find(c => c.correo === correo);
-    if(!cuenta){ pintarSesion(); return; }
-    aplicarUsuario(cuenta);
   }
 
   function showScreen(name){
@@ -1345,23 +1388,8 @@ window.__prendasRapidas = (function(){
   document.getElementById('menu-perfil').addEventListener('click', () => { document.getElementById('user-drop').hidden = true; showScreen('registro'); });
   document.getElementById('menu-salir').addEventListener('click', () => {
     document.getElementById('user-drop').hidden = true;
-    isLoggedIn = false;
-    currentUser = null;
-    miPerfil = null;
-    soloMias = false;
-    try{
-      localStorage.removeItem(SESION_KEY);
-      localStorage.removeItem(USER_ID_KEY);
-      localStorage.removeItem(PERFIL_KEY);
-      localStorage.removeItem(KEY_NOMBRE);
-      localStorage.removeItem(KEY_TELEFONO);
-      localStorage.removeItem(KEY_ENTREGA);
-    }catch(err){}
-    miUserId = obtenerUserId();
-    pintarSesion();
-    limpiarRegistro();
-    reiniciarChat();
-    renderCatalog();
+    salirLocal();
+    if(auth) auth.signOut().catch(err => console.error('No se pudo cerrar la sesión', err));
     showScreen('catalogo');
   });
   document.addEventListener('click', (e) => {
@@ -1390,6 +1418,33 @@ window.__prendasRapidas = (function(){
   document.getElementById('btn-olvide').addEventListener('click', () => {
     document.getElementById('recuperar-box').hidden = false;
   });
+
+  function mensajeErrorAuth(err){
+    const mensajes = {
+      'auth/email-already-in-use': 'Ese correo ya tiene cuenta. Entra con tu contraseña.',
+      'auth/invalid-email': 'Revisa el correo.',
+      'auth/missing-email': 'Escribe el correo de tu cuenta.',
+      'auth/weak-password': 'La contraseña debe tener al menos 6 caracteres.',
+      'auth/invalid-credential': 'Correo o contraseña incorrectos.',
+      'auth/invalid-login-credentials': 'Correo o contraseña incorrectos.',
+      'auth/wrong-password': 'Correo o contraseña incorrectos.',
+      'auth/user-not-found': 'Correo o contraseña incorrectos.',
+      'auth/user-disabled': 'Esta cuenta está desactivada. Escríbenos por WhatsApp.',
+      'auth/too-many-requests': 'Demasiados intentos. Espera unos minutos o cambia tu contraseña.',
+      'auth/network-request-failed': 'No hay conexión. Revisa tu internet e inténtalo de nuevo.',
+      'auth/popup-blocked': 'El navegador bloqueó la ventana de Google. Permite las ventanas emergentes e inténtalo otra vez.',
+      'auth/account-exists-with-different-credential': 'Ese correo ya tiene cuenta. Entra con tu correo y contraseña.',
+      'auth/operation-not-allowed': 'Este método de ingreso todavía no está activado.'
+    };
+    return mensajes[err && err.code] || 'No se pudo completar. Inténtalo de nuevo.';
+  }
+  function mostrarError(id, texto){
+    const el = document.getElementById(id);
+    el.textContent = texto;
+    el.classList.add('show');
+  }
+  const SIN_SERVICIO = 'No se pudo conectar con el servicio de cuentas. Recarga la página e inténtalo de nuevo.';
+
   document.getElementById('form-crear').addEventListener('submit', async (e) => {
     e.preventDefault();
     const error = document.getElementById('auth-error-crear');
@@ -1402,66 +1457,136 @@ window.__prendasRapidas = (function(){
     const correoOk = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(correo);
     const telOk = /^9\d{8}$/.test(telefono) || /^\d{9}$/.test(telefono);
     if(!nombre || !apellido || !correoOk || pass.length < 6 || !telOk || !zona){
-      error.textContent = 'Revisa el correo, una contraseña de al menos 6 caracteres, el celular y la zona.';
-      error.classList.add('show');
+      mostrarError('auth-error-crear', 'Revisa el correo, una contraseña de al menos 6 caracteres, el celular y la zona.');
       return;
     }
-    const cuentas = leerCuentas();
-    if(cuentas.some(c => c.correo === correo)){
-      error.textContent = 'Ese correo ya tiene cuenta. Entra con tu contraseña.';
-      error.classList.add('show');
-      abrirAuth('entrar');
-      document.getElementById('login-correo').value = correo;
-      return;
+    if(!auth){ mostrarError('auth-error-crear', SIN_SERVICIO); return; }
+    error.classList.remove('show');
+    const boton = e.currentTarget.querySelector('[type=submit]');
+    boton.disabled = true;
+    authManual = true;
+    try{
+      const cred = await auth.createUserWithEmailAndPassword(correo, pass);
+      await cred.user.updateProfile({ displayName: (nombre + ' ' + apellido).trim() }).catch(err => console.warn('No se pudo guardar el nombre en la cuenta', err));
+      const perfil = { nombre, apellido, correo, zona, telefono, preferenciaEntrega: '' };
+      try{ await guardarPerfilNube(cred.user.uid, perfil, true); }
+      catch(err){ console.error('No se pudo guardar el perfil en Firestore:', err); }
+      await entrarConUsuario(cred.user, perfil);
+      continuarPendiente();
+    }catch(err){
+      if(err && err.code === 'auth/email-already-in-use'){
+        abrirAuth('entrar');
+        document.getElementById('login-correo').value = correo;
+        mostrarError('auth-error-login', mensajeErrorAuth(err));
+      }else{
+        console.error('No se pudo crear la cuenta:', err);
+        mostrarError('auth-error-crear', mensajeErrorAuth(err));
+      }
+    }finally{
+      authManual = false;
+      boton.disabled = false;
     }
-    const cuenta = { correo, passHash: await hashClave(pass), nombre, apellido, telefono, zona, userId: 'user_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 8) };
-    cuentas.push(cuenta);
-    guardarCuentas(cuentas);
-    aplicarUsuario(cuenta);
-    const vinculadas = await vincularPrendasPorTelefono(cuenta);
-    reiniciarChat();
-    renderCatalog();
-    if(vinculadas) alert('Encontramos ' + vinculadas + (vinculadas === 1 ? ' prenda publicada' : ' prendas publicadas') + ' con tu número y ya están en tu cuenta.');
-    if(firebaseListo && db){
-      db.collection('usuarios').add({ nombre, apellido, correo, telefono, zona, userId: cuenta.userId, creado: firebase.firestore.FieldValue.serverTimestamp() }).catch(() => {});
-    }
-    continuarPendiente();
   });
   document.getElementById('form-entrar').addEventListener('submit', async (e) => {
     e.preventDefault();
     const error = document.getElementById('auth-error-login');
     const correo = document.getElementById('login-correo').value.trim().toLowerCase();
     const pass = document.getElementById('login-pass').value;
-    const cuenta = leerCuentas().find(c => c.correo === correo);
-    if(!cuenta || cuenta.passHash !== await hashClave(pass)){
-      error.textContent = 'Correo o contraseña incorrectos.';
-      error.classList.add('show');
-      return;
+    if(!correo || !pass){ mostrarError('auth-error-login', 'Correo o contraseña incorrectos.'); return; }
+    if(!auth){ mostrarError('auth-error-login', SIN_SERVICIO); return; }
+    error.classList.remove('show');
+    const boton = e.currentTarget.querySelector('[type=submit]');
+    boton.disabled = true;
+    authManual = true;
+    try{
+      const cred = await auth.signInWithEmailAndPassword(correo, pass);
+      await entrarConUsuario(cred.user);
+      continuarPendiente();
+    }catch(err){
+      console.warn('No se pudo iniciar sesión:', err && err.code);
+      mostrarError('auth-error-login', mensajeErrorAuth(err));
+    }finally{
+      authManual = false;
+      boton.disabled = false;
     }
-    aplicarUsuario(cuenta);
-    reiniciarChat();
-    renderCatalog();
-    continuarPendiente();
   });
-  document.getElementById('btn-nueva-pass').addEventListener('click', async () => {
-    const error = document.getElementById('auth-error-login');
+  document.getElementById('btn-google').addEventListener('click', async (e) => {
+    const boton = e.currentTarget;
+    document.getElementById('auth-error-google').classList.remove('show');
+    if(!auth){ mostrarError('auth-error-google', SIN_SERVICIO); return; }
+    boton.disabled = true;
+    authManual = true;
+    try{
+      const proveedor = new firebase.auth.GoogleAuthProvider();
+      proveedor.setCustomParameters({ prompt: 'select_account' });
+      const cred = await auth.signInWithPopup(proveedor);
+      let perfil = null;
+      try{ perfil = await leerPerfilNube(cred.user.uid); }
+      catch(err){ console.error('No se pudo leer tu perfil', err); }
+      const esNuevo = !perfil;
+      if(esNuevo){
+        // Cuenta nueva con Google: falta la zona y el WhatsApp; se completan en «Mi perfil».
+        perfil = perfilDesdeAuth(cred.user);
+        try{ await guardarPerfilNube(cred.user.uid, perfil, true); }
+        catch(err){ console.error('No se pudo guardar el perfil en Firestore:', err); }
+      }
+      await entrarConUsuario(cred.user, perfil);
+      if(esNuevo && !accionPendiente){ cerrarAuth(); showScreen('registro'); }
+      else continuarPendiente();
+    }catch(err){
+      const code = err && err.code;
+      if(code !== 'auth/popup-closed-by-user' && code !== 'auth/cancelled-popup-request'){
+        console.error('No se pudo entrar con Google:', err);
+        mostrarError('auth-error-google', mensajeErrorAuth(err));
+      }
+    }finally{
+      authManual = false;
+      boton.disabled = false;
+    }
+  });
+  document.getElementById('btn-nueva-pass').addEventListener('click', async (e) => {
+    const boton = e.currentTarget;
+    const ok = document.getElementById('recuperar-ok');
     const correo = document.getElementById('login-correo').value.trim().toLowerCase();
-    const pass = document.getElementById('nueva-pass').value;
-    const cuentas = leerCuentas();
-    const cuenta = cuentas.find(c => c.correo === correo);
-    if(!cuenta || pass.length < 6){
-      error.textContent = 'Escribe el correo de la cuenta y una contraseña nueva de al menos 6 caracteres.';
-      error.classList.add('show');
+    document.getElementById('auth-error-login').classList.remove('show');
+    ok.style.display = 'none';
+    if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(correo)){
+      mostrarError('auth-error-login', 'Escribe arriba el correo de tu cuenta para enviarte el enlace.');
       return;
     }
-    cuenta.passHash = await hashClave(pass);
-    guardarCuentas(cuentas);
-    error.textContent = 'Contraseña actualizada. Ya puedes entrar.';
-    error.classList.add('show');
+    if(!auth){ mostrarError('auth-error-login', SIN_SERVICIO); return; }
+    boton.disabled = true;
+    try{
+      await auth.sendPasswordResetEmail(correo);
+      ok.textContent = 'Listo. Si ese correo tiene cuenta, te llegará un enlace para cambiar la contraseña (revisa también la carpeta de spam).';
+      ok.style.display = 'block';
+    }catch(err){
+      if(err && err.code === 'auth/user-not-found'){
+        // Mismo mensaje que si existiera: no revelamos qué correos tienen cuenta.
+        ok.textContent = 'Listo. Si ese correo tiene cuenta, te llegará un enlace para cambiar la contraseña (revisa también la carpeta de spam).';
+        ok.style.display = 'block';
+      }else{
+        console.error('No se pudo enviar el correo para cambiar la contraseña:', err);
+        mostrarError('auth-error-login', mensajeErrorAuth(err));
+      }
+    }finally{
+      boton.disabled = false;
+    }
   });
 
-  restaurarSesion();
-  autocompletarRegistro();
+  // Sesión guardada por Firebase (al recargar la página) y cierres de sesión desde otra pestaña.
+  if(firebaseListo && auth){
+    auth.onAuthStateChanged((user) => {
+      if(authManual) return;
+      if(user){
+        if(sesionActiva() && miUserId === user.uid) return;
+        entrarConUsuario(user).catch(err => console.error('No se pudo abrir tu sesión', err));
+      }else if(sesionActiva()){
+        salirLocal();
+      }
+    });
+  }
+  pintarSesion();
 
   let soloMias = false;
   let soloPendientes = false;
@@ -1542,19 +1667,14 @@ window.__prendasRapidas = (function(){
   function updateFilterOptions(){
     const cats = [...new Set(prendas.map(p=>p.cat))];
     const tallas = [...new Set(prendas.map(p=>p.talla))];
-    document.getElementById('f-cat').innerHTML = '<option value="">Categoría</option>' + cats.map(c=>`<option>${c}</option>`).join('');
-    document.getElementById('f-talla').innerHTML = '<option value="">Talla</option>' + tallas.map(t=>`<option>${t}</option>`).join('');
+    document.getElementById('f-cat').innerHTML = '<option value="">Categoría</option>' + cats.map(c=>`<option>${escaparHtml(c)}</option>`).join('');
+    document.getElementById('f-talla').innerHTML = '<option value="">Talla</option>' + tallas.map(t=>`<option>${escaparHtml(t)}</option>`).join('');
   }
 
-  const ADMIN_NOMBRE = ''; // retirado del repositorio público
-  const ADMIN_TELEFONO = ''; // retirado del repositorio público
-  function rolDe(cuenta){
-    if(!ADMIN_NOMBRE && !ADMIN_TELEFONO) return 'user';
-    const nombre = ((cuenta.nombre || '') + ' ' + (cuenta.apellido || '')).replace(/\s+/g, ' ').trim().toUpperCase();
-    return (nombre === ADMIN_NOMBRE || String(cuenta.telefono || '').replace(/\D/g, '').endsWith(ADMIN_TELEFONO)) ? 'admin' : 'user';
-  }
+  // Admin = existe el documento admins/{uid} (lo crea scripts/migrar.mjs --hacer-admin).
+  // Se lee una vez al iniciar sesión; las reglas de Firestore lo vuelven a comprobar en cada escritura.
   function esAdmin(){
-    return sesionActiva() && rolDe(currentUser) === 'admin';
+    return sesionActiva() && soyAdmin;
   }
 
   function esPrendaPropia(p){
@@ -1830,8 +1950,7 @@ window.__prendasRapidas = (function(){
     let comprador;
     if(ventaModo === 'calificar'){
       if(!puedeCalificarComoComprador(p)) return;
-      const inicial = (currentUser.apellido || '').trim().slice(0, 1);
-      comprador = { id: miUserId, nombre: (currentUser.nombre + (inicial ? ' ' + inicial.toUpperCase() + '.' : '')).trim() };
+      comprador = { id: miUserId, nombre: nombreCorto(currentUser.nombre, currentUser.apellido) };
     }else{
       if(!puedeCalificar(p)) return;
       comprador = compradorElegido();
@@ -1842,7 +1961,10 @@ window.__prendasRapidas = (function(){
     if(!comentario){ error.textContent = 'Cuenta cómo fue el proceso en un comentario.'; error.classList.add('show'); return; }
     {
       guardarResena({
-        id: 'r_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 7),
+        // Reseña del comprador: una por prenda (las reglas exigen el id {prendaId}_{uid}).
+        id: ventaModo === 'calificar'
+          ? p.id + '_' + miUserId
+          : 'r_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 7),
         sellerId: p.userId || null,
         sellerName: p.publicador || 'Vendedor',
         prendaId: p.id,
@@ -1878,7 +2000,7 @@ window.__prendasRapidas = (function(){
     }
     document.getElementById('rep-lista').innerHTML = lista.map(r => {
       const prenda = prendas.find(p => p.id === r.prendaId);
-      const thumb = prenda && prenda.foto ? `<img src="${prenda.foto}" alt="${escaparHtml(r.prendaCat)}">` : '';
+      const thumb = prenda && prenda.foto ? `<img src="${escaparHtml(prenda.foto)}" alt="${escaparHtml(r.prendaCat)}">` : '';
       return `<div class="resena">
         <div class="resena-thumb">${thumb}</div>
         <div><strong>${escaparHtml(r.buyerName)}</strong> ${estrellasHtml(r.stars)}
@@ -1935,7 +2057,13 @@ window.__prendasRapidas = (function(){
 
     const idNube = p.id && String(p.id).indexOf('local_') !== 0;
     if(firebaseListo && db && idNube){
-      db.collection('prendas').doc(p.id).delete().then(() => {
+      // En un mismo lote se borra el contacto privado y la prenda.
+      const ref = db.collection('prendas').doc(p.id);
+      const lote = db.batch();
+      lote.delete(ref.collection('privado').doc('contacto'));
+      lote.delete(ref);
+      lote.commit().then(() => {
+        contactos.delete(p.id);
         quitarDeLista();
       }).catch(err => {
         console.error('Error eliminando en Firestore:', err);
@@ -1982,7 +2110,7 @@ window.__prendasRapidas = (function(){
         const card = document.createElement('div');
         card.className = 'prenda-card';
         const imgSrc = p.mini || p.foto;
-        const thumbContenido = imgSrc ? `<img src="${imgSrc}" alt="Foto de ${escaparHtml(p.cat)}" decoding="async" onload="this.classList.add('ok')" onerror="this.classList.add('ok')">` : '';
+        const thumbContenido = imgSrc ? `<img src="${escaparHtml(imgSrc)}" alt="Foto de ${escaparHtml(p.cat)}" decoding="async" onload="this.classList.add('ok')" onerror="this.classList.add('ok')">` : '';
         const vendida = estaVendida(p);
         card.innerHTML = `
           <div class="prenda-thumb${imgSrc ? '' : ' sk'}" style="${imgSrc ? 'background:#f2f4f5' : ''}">
@@ -1995,8 +2123,8 @@ window.__prendasRapidas = (function(){
             <div class="prenda-meta"><span class="loc-badge">San Miguel${p.zona ? ' · ' + escaparHtml(p.zona) : ''}</span></div>
             <div class="prenda-meta">Talla ${escaparHtml(p.talla)}</div>
             <div class="price-row">
-              <span class="price">${p.modo==='venta' ? 'S/ '+p.precio : modoLabel[p.modo]}</span>
-              <span class="badge">${p.estado}</span>
+              <span class="price">${p.modo==='venta' ? 'S/ '+escaparHtml(String(p.precio)) : modoLabel[p.modo]}</span>
+              <span class="badge">${escaparHtml(p.estado)}</span>
             </div>
             ${vendida ? '<button type="button" class="interesa-btn vendida" disabled>Vendida</button>' : '<button class="interesa-btn">Me interesa</button>'}
             ${puedeMarcarVendido(p) ? '<button type="button" class="vender-btn">Marcar como vendido</button>' : ''}
@@ -2033,31 +2161,55 @@ window.__prendasRapidas = (function(){
   }
 
   function registrarInteres(p, modalidadEntrega){
-    // Registra la interacción en tiempo real para métricas de conversión
-    if(firebaseListo && db){
+    // Registra la interacción en tiempo real para métricas de conversión (sin el teléfono del comprador).
+    if(firebaseListo && db && miUserId){
       db.collection('intereses').add({
         prendaId: p.id || null,
         cat: p.cat,
         vendedorNombre: p.publicador,
         vendedorZona: p.zona,
-        compradorId: obtenerCompradorId(),
+        compradorId: miUserId,
         compradorNombre: miPerfil ? miPerfil.nombre : null,
-        compradorTelefono: miPerfil ? miPerfil.telefono : null,
         modalidadEntrega: modalidadEntrega || null,
         fecha: firebase.firestore.FieldValue.serverTimestamp()
       }).catch(err => console.error('Error registrando interés en Firestore:', err));
-      // Registro público mínimo (sin teléfono): permite al vendedor elegir al comprador al vender.
-      const compradorId = obtenerCompradorId();
-      if(p.id && String(p.id).indexOf('local_') !== 0 && compradorId && compradorId !== p.userId){
-        const inicial = miPerfil && miPerfil.apellido ? ' ' + miPerfil.apellido.trim().slice(0, 1).toUpperCase() + '.' : '';
-        db.collection('interesados').doc(p.id + '_' + compradorId).set({
-          prendaId: p.id,
-          compradorId,
-          compradorNombre: ((miPerfil && miPerfil.nombre) || 'Comprador').trim() + inicial,
-          fecha: firebase.firestore.FieldValue.serverTimestamp()
-        }, { merge: true }).catch(err => console.error('Error registrando interesado:', err));
-      }
     }
+  }
+
+  // «Me interesa» → WhatsApp del vendedor. El teléfono vive en prendas/{id}/privado/contacto y las reglas
+  // solo dejan leerlo a quien tiene interesados/{prendaId}_{uid}: primero se crea ese documento
+  // (también sirve para que el vendedor elija al comprador al marcar «vendido») y después se lee el contacto.
+  const contactos = new Map();        // prendaId -> teléfono de 9 dígitos
+  const contactoEnCamino = new Map(); // prendaId -> Promise<teléfono | ''>
+  async function asegurarInteresado(p){
+    if(!(firebaseListo && db && miUserId) || !esIdNube(p.id) || esPrendaPropia(p)) return;
+    const ref = db.collection('interesados').doc(p.id + '_' + miUserId);
+    let existe = false;
+    try{ existe = (await ref.get()).exists; }catch(err){ existe = false; }
+    if(existe) return;
+    await ref.set({
+      prendaId: p.id,
+      compradorId: miUserId,
+      compradorNombre: nombreCorto((miPerfil && miPerfil.nombre) || 'Comprador', miPerfil && miPerfil.apellido),
+      fecha: firebase.firestore.FieldValue.serverTimestamp()
+    });
+  }
+  async function cargarContacto(p){
+    if(contactos.has(p.id)) return contactos.get(p.id);
+    if(!(firebaseListo && db) || !esIdNube(p.id)) return '';
+    const snap = await db.collection('prendas').doc(p.id).collection('privado').doc('contacto').get();
+    const tel = snap.exists ? telefonoSoloDigitos(snap.data().telefono) : '';
+    if(tel) contactos.set(p.id, tel);
+    return tel;
+  }
+  function prepararContacto(p){
+    if(!contactoEnCamino.has(p.id)){
+      const promesa = asegurarInteresado(p).then(() => cargarContacto(p));
+      contactoEnCamino.set(p.id, promesa);
+      // Si falla (sin conexión, por ejemplo) se puede volver a intentar.
+      promesa.then(tel => { if(!tel) contactoEnCamino.delete(p.id); }, () => contactoEnCamino.delete(p.id));
+    }
+    return contactoEnCamino.get(p.id);
   }
 
   function descripcionPrenda(p){
@@ -2078,12 +2230,12 @@ window.__prendasRapidas = (function(){
     }
     return `${intro} ¿Coordinamos la entrega en un punto público seguro de San Miguel, por ejemplo el Parque de la Amistad o la Plaza San Miguel? ¿Qué día y a qué hora te acomoda?`;
   }
-  function urlWhatsApp(p, preferencia){
-    const tel = String(p.whatsapp || ('51' + (p.telefono || ''))).replace(/\D/g, '');
-    return 'https://wa.me/' + tel + '?text=' + encodeURIComponent(mensajeWhatsApp(p, preferencia));
+  function urlWhatsApp(p, preferencia, telefono){
+    const t = telefonoSoloDigitos(telefono);
+    const numero = t.length === 9 ? '51' + t : t;
+    return 'https://wa.me/' + numero + '?text=' + encodeURIComponent(mensajeWhatsApp(p, preferencia));
   }
-  function abrirWhatsApp(p, preferencia){
-    const url = urlWhatsApp(p, preferencia);
+  function abrirWhatsApp(url){
     window.open(url, '_blank', 'noopener,noreferrer');
     return url;
   }
@@ -2109,7 +2261,9 @@ window.__prendasRapidas = (function(){
       btn.classList.add('done');
     }
     registrarInteres(p, leerDatosUsuario().preferencia);
+    prepararContacto(p).catch(err => console.error('No se pudo obtener el contacto del vendedor:', err));
     renderInteres(p);
+    document.getElementById('entrega-whatsapp-wrap').innerHTML = '';
     if(CHAT_ACTIVO) iniciarConversacion(p);
     else showScreen('entrega');
   }
@@ -2302,71 +2456,6 @@ window.__prendasRapidas = (function(){
     escucharConversaciones();
   }
 
-  // Al registrarse: las prendas publicadas antes con ese celular pasan a la cuenta nueva
-  // (junto con los chats donde esa persona era la vendedora). Devuelve cuántas prendas se vincularon.
-  async function vincularPrendasPorTelefono(cuenta){
-    const tel = telefonoSoloDigitos(cuenta.telefono);
-    if(!tel) return 0;
-    const coincide = (p) => {
-      const t = telefonoSoloDigitos(p.telefono || p.whatsapp);
-      return (t === tel || t === '51' + tel) && p.userId !== cuenta.userId;
-    };
-    const candidatas = new Map();
-    prendas.filter(coincide).forEach(p => candidatas.set(p.id, p));
-    if(firebaseListo && db){
-      try{
-        const snap = await db.collection('prendas').where('telefono', '==', tel).get();
-        snap.forEach(doc => { const p = mapPrendaFirestore(doc); if(coincide(p)) candidatas.set(p.id, p); });
-      }catch(err){ console.warn('No se pudieron buscar prendas por celular', err); }
-    }
-    if(!candidatas.size) return 0;
-
-    const viejos = new Set();
-    candidatas.forEach(p => {
-      if(p.userId) viejos.add(p.userId);
-      viejos.add('vendedor_' + p.id);
-    });
-
-    if(firebaseListo && db){
-      try{
-        const nube = Array.from(candidatas.values()).filter(p => p.id && String(p.id).indexOf('local_') !== 0);
-        for(let i = 0; i < nube.length; i += 400){
-          const lote = db.batch();
-          nube.slice(i, i + 400).forEach(p => lote.update(db.collection('prendas').doc(p.id), { userId: cuenta.userId }));
-          await lote.commit();
-        }
-        for(const viejo of viejos){
-          const convs = await db.collection('conversaciones').where('seller_id', '==', viejo).get();
-          const lote = db.batch();
-          convs.forEach(d => lote.update(d.ref, { seller_id: cuenta.userId }));
-          const msgs = [];
-          for(const campo of ['sender_id', 'receiver_id']){
-            const s = await db.collection('mensajes').where(campo, '==', viejo).get();
-            s.forEach(d => lote.update(d.ref, { [campo]: cuenta.userId }));
-            msgs.push(s.size);
-          }
-          if(convs.size || msgs.some(n => n)) await lote.commit();
-        }
-      }catch(err){
-        console.error('No se pudieron vincular las prendas en Firestore:', err);
-        alert('Encontramos tus prendas anteriores, pero no se pudieron pasar a tu cuenta (revisa los permisos de Firestore).');
-        return 0;
-      }
-    }
-
-    prendas.forEach(p => { if(candidatas.has(p.id)) p.userId = cuenta.userId; });
-    guardarPrendasLocal();
-    try{
-      const raw = JSON.parse(localStorage.getItem(CHAT_LOCAL_KEY) || '{}');
-      (raw.conversaciones || []).forEach(c => { if(viejos.has(c.seller_id)) c.seller_id = cuenta.userId; });
-      (raw.mensajes || []).forEach(m => {
-        if(viejos.has(m.sender_id)) m.sender_id = cuenta.userId;
-        if(viejos.has(m.receiver_id)) m.receiver_id = cuenta.userId;
-      });
-      localStorage.setItem(CHAT_LOCAL_KEY, JSON.stringify(raw));
-    }catch(err){ /* sin chat local */ }
-    return candidatas.size;
-  }
   async function iniciarConversacion(p){
     if(p.userId && p.userId === miUserId){
       alert('Esta prenda es tuya. El chat se abre cuando otra persona marca Me interesa.');
@@ -2509,7 +2598,7 @@ window.__prendasRapidas = (function(){
       guardar.textContent = 'Continuar';
     }else{
       titulo.textContent = 'Mis datos';
-      ayuda.textContent = 'Puedes actualizar tu nombre, WhatsApp y preferencia de entrega. Se guardan en este navegador.';
+      ayuda.textContent = 'Puedes actualizar tu nombre, WhatsApp y preferencia de entrega. Se guardan en tu cuenta.';
       guardar.textContent = 'Guardar';
     }
     const overlay = document.getElementById('modal-datos');
@@ -2535,7 +2624,8 @@ window.__prendasRapidas = (function(){
       return;
     }
     errorMsg.classList.remove('show');
-    persistirDatosUsuario({ nombre, telefono, preferencia });
+    persistirDatosUsuario({ nombre, telefono, preferencia })
+      .catch(err => console.error('No se pudieron guardar tus datos en tu cuenta:', err));
     autocompletarRegistro();
     const modo = modalModo;
     const prenda = prendaPendiente;
@@ -2570,7 +2660,7 @@ window.__prendasRapidas = (function(){
         <div class="detalle-body">
           <h4>${escaparHtml(p.cat)}</h4>
           <div class="detalle-tags">
-            <span class="badge">${p.modo==='venta' ? 'S/ '+p.precio : modoLabel[p.modo]}</span>
+            <span class="badge">${p.modo==='venta' ? 'S/ '+escaparHtml(String(p.precio)) : modoLabel[p.modo]}</span>
             <span class="badge">Talla ${escaparHtml(p.talla)}</span>
             <span class="badge">${escaparHtml(p.estado)}</span>
             <span class="loc-badge">San Miguel${p.zona ? ' · ' + escaparHtml(p.zona) : ''}</span>
@@ -2623,10 +2713,13 @@ window.__prendasRapidas = (function(){
     enlazar('btn-ver-vendedor', () => abrirReputacion(p.userId, p.publicador, p.zona));
   }
 
-  document.getElementById('btn-crear-perfil').addEventListener('click', ()=>{
+  document.getElementById('btn-crear-perfil').addEventListener('click', async (e)=>{
+    // La pantalla «Mi perfil» pide sesión: el perfil se guarda en usuarios/{uid} y usuarios/{uid}/privado/datos.
+    if(!sesionActiva()){ pedirSesion(() => showScreen('registro')); return; }
+    const boton = e.currentTarget;
     const nombre = document.getElementById('reg-nombre').value.trim();
     const apellido = document.getElementById('reg-apellido').value.trim();
-    const correo = (isLoggedIn && currentUser) ? currentUser.correo : document.getElementById('reg-correo').value.trim();
+    const correo = currentUser.correo || document.getElementById('reg-correo').value.trim();
     const zona = document.getElementById('reg-zona').value;
     const raw = document.getElementById('reg-whatsapp').value.replace(/\D/g,'');
     const errorMsg = document.getElementById('registro-error');
@@ -2639,30 +2732,23 @@ window.__prendasRapidas = (function(){
     }
     errorMsg.classList.remove('show');
 
+    const telefonoAntes = telefonoSoloDigitos(miPerfil && miPerfil.telefono);
     const preferenciaPrevia = (miPerfil && miPerfil.preferenciaEntrega) || '';
     miPerfil = { nombre, apellido, correo, zona, telefono: raw, preferenciaEntrega: preferenciaPrevia };
-    guardarPerfilLocal(miPerfil);
+    sincronizarCuenta({ nombre, apellido, telefono: raw, zona });
+    boton.disabled = true;
     try{
-      localStorage.setItem(KEY_NOMBRE, nombre);
-      localStorage.setItem(KEY_TELEFONO, raw);
-      if(preferenciaPrevia) localStorage.setItem(KEY_ENTREGA, preferenciaPrevia);
-    }catch(err){ console.warn('No se pudieron guardar los datos del usuario', err); }
-
-    if(isLoggedIn && currentUser){
-      sincronizarCuenta({ nombre, apellido, telefono: raw, zona });
-      showScreen('catalogo');
+      await guardarCambiosPerfil(telefonoAntes);
+    }catch(err){
+      console.error('Error guardando el perfil en Firestore:', err);
+      errorMsg.textContent = 'No se pudo guardar tu perfil. Revisa tu conexión e inténtalo de nuevo.';
+      errorMsg.classList.add('show');
       return;
+    }finally{
+      boton.disabled = false;
     }
-
-    // b) Guarda el perfil en la colección "usuarios" de Firestore
-    if(firebaseListo && db){
-      db.collection('usuarios').add({
-        nombre, apellido, correo, zona, telefono: raw,
-        creado: firebase.firestore.FieldValue.serverTimestamp()
-      }).catch(err => console.error('Error guardando usuario en Firestore:', err));
-    }
-
-    showScreen('publicar');
+    autocompletarRegistro();
+    showScreen('catalogo');
   });
 
   // ============ FOTO DE LA PRENDA (input real + vista previa + Base64) ============
@@ -2940,19 +3026,20 @@ window.__prendasRapidas = (function(){
         fotoHash: fotoHashActual,
         status: 'available',
         userId: miUserId,
-        publicador: (miPerfil.nombre + ' ' + (miPerfil.apellido || '')).trim(),
+        // Público: solo «Nombre A.». El WhatsApp va aparte, en prendas/{id}/privado/contacto.
+        publicador: nombreCorto(miPerfil.nombre, miPerfil.apellido),
         zona: miPerfil.zona,
-        telefono: miPerfil.telefono,
-        whatsapp: '51' + miPerfil.telefono,
         fecha: new Date().toISOString()
       };
 
       if(firebaseListo && db){
         try{
-          const docRef = await db.collection('prendas').add({
+          // La prenda y su contacto privado se guardan en un mismo lote.
+          const docRef = db.collection('prendas').doc();
+          const lote = db.batch();
+          lote.set(docRef, {
             publicador: nuevaPrenda.publicador,
             zona: nuevaPrenda.zona,
-            telefono: nuevaPrenda.telefono,
             cat: nuevaPrenda.cat,
             talla: nuevaPrenda.talla,
             estado: nuevaPrenda.estado,
@@ -2971,6 +3058,8 @@ window.__prendasRapidas = (function(){
             fecha: firebase.firestore.FieldValue.serverTimestamp(),
             createdAt: firebase.firestore.FieldValue.serverTimestamp()
           });
+          lote.set(docRef.collection('privado').doc('contacto'), { telefono: telefonoSoloDigitos(miPerfil.telefono) });
+          await lote.commit();
           if(!prendas.some(p => p.id === docRef.id)){
             prendas.unshift(Object.assign({}, nuevaPrenda, { id: docRef.id }));
             guardarPrendasLocal();
@@ -3010,25 +3099,44 @@ window.__prendasRapidas = (function(){
 
   const entregaDesdeTarjeta = { publico: 'Punto público seguro', envio: 'Envío motorizado' };
   document.querySelectorAll('.entrega-card').forEach(card=>{
-    card.addEventListener('click', ()=>{
+    card.addEventListener('click', async ()=>{
       document.querySelectorAll('.entrega-card').forEach(c=>c.classList.remove('selected'));
       card.classList.add('selected');
-      document.getElementById('entrega-confirm').style.display = 'block';
+      const confirmacion = document.getElementById('entrega-confirm');
+      const wrap = document.getElementById('entrega-whatsapp-wrap');
+      confirmacion.style.display = 'block';
       const preferencia = entregaDesdeTarjeta[card.dataset.entrega];
       const datos = leerDatosUsuario();
       if(datos.nombre && telefonoEsValido(datos.telefono) && preferenciaValida(preferencia)){
-        persistirDatosUsuario({ nombre: datos.nombre, telefono: datos.telefono, preferencia });
+        persistirDatosUsuario({ nombre: datos.nombre, telefono: datos.telefono, preferencia })
+          .catch(err => console.error('No se pudo guardar tu preferencia de entrega:', err));
       }
       if(!prendaActual) return;
       const p = prendaActual;
+      // El WhatsApp del vendedor solo se entrega a quien marcó «Me interesa» con su cuenta.
+      if(!sesionActiva()){
+        confirmacion.style.display = 'none';
+        solicitarInteres(p, null);
+        return;
+      }
       registrarInteres(p, preferencia);
-      const waUrl = urlWhatsApp(p, preferencia);
+      let telefono = contactos.get(p.id) || '';
+      if(!telefono){
+        try{ telefono = await prepararContacto(p); }
+        catch(err){ console.error('No se pudo obtener el contacto del vendedor:', err); }
+      }
+      if(!telefono){
+        confirmacion.style.display = 'none';
+        wrap.innerHTML = '<p class="error-msg show" style="margin:12px 0 0;">No pudimos obtener el WhatsApp del vendedor. Revisa tu conexión e inténtalo de nuevo.</p>';
+        return;
+      }
+      const waUrl = urlWhatsApp(p, preferencia, telefono);
       const nombreVendedor = (p.publicador || 'vecino/a').split(' ')[0];
-      document.getElementById('entrega-whatsapp-wrap').innerHTML = `
-        <a class="whatsapp-btn" id="btn-whatsapp-entrega" href="${waUrl}" target="_blank" rel="noopener">
-          ${WHATSAPP_ICON} Contactar a ${nombreVendedor} por WhatsApp
+      wrap.innerHTML = `
+        <a class="whatsapp-btn" id="btn-whatsapp-entrega" href="${escaparHtml(waUrl)}" target="_blank" rel="noopener">
+          ${WHATSAPP_ICON} Contactar a ${escaparHtml(nombreVendedor)} por WhatsApp
         </a>`;
-      abrirWhatsApp(p, preferencia);
+      abrirWhatsApp(waUrl);
     });
   });
 
@@ -3107,7 +3215,7 @@ window.__prendasRapidas = (function(){
 
   function mapPrendaFirestore(doc){
     const d = doc.data() || {};
-    const telefono = d.telefono ? String(d.telefono).replace(/\D/g, '') : '';
+    // El teléfono del vendedor no se lee de la prenda: está en prendas/{id}/privado/contacto.
     return {
       id: doc.id,
       cat: d.cat || 'Prenda',
@@ -3132,8 +3240,6 @@ window.__prendasRapidas = (function(){
       userId: d.userId || null,
       publicador: d.publicador || 'Vecino',
       zona: d.zona || '',
-      telefono,
-      whatsapp: d.whatsapp || (telefono ? '51' + telefono : ''),
       fechaMs: millisDeFecha(d.fecha || d.createdAt)
     };
   }
