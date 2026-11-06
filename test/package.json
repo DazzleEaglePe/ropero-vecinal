@@ -1,0 +1,17 @@
+{
+  "name": "ropero-vecinal-pruebas",
+  "private": true,
+  "type": "module",
+  "description": "Pruebas de las reglas de Firestore y del sitio contra los emuladores locales de Firebase.",
+  "scripts": {
+    "test": "firebase emulators:exec --only firestore --project demo-ropero-vecinal --config ../firebase.json \"node --test reglas.test.mjs\"",
+    "e2e": "firebase emulators:exec --only auth,firestore,hosting --project demo-ropero-vecinal --config ../firebase.json \"node sitio.e2e.mjs\"",
+    "emuladores": "firebase emulators:start --only auth,firestore,hosting --project demo-ropero-vecinal --config ../firebase.json"
+  },
+  "devDependencies": {
+    "@firebase/rules-unit-testing": "^6.0.0",
+    "firebase": "^13.2.0",
+    "firebase-tools": "^15.35.0",
+    "puppeteer-core": "^25.16.0"
+  }
+}
